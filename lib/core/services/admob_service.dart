@@ -1,6 +1,5 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode, defaultTargetPlatform, TargetPlatform;
 import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'package:flutter/foundation.dart';
 
 /// AdMob Service for managing interstitial advertisements
 /// Follows AdMob policies and best practices
@@ -10,8 +9,8 @@ class AdMobService {
   AdMobService._internal();
 
   // Ad Unit IDs
-  static const String _androidInterstitialAdUnitId = 'ca-app-pub-9899607523942636/7074433018';
-  static const String _iosInterstitialAdUnitId = 'ca-app-pub-9899607523942636/7074433018';
+  static const String _androidInterstitialAdUnitId = 'ca-app-pub-9899607523942636/3420885198';
+  static const String _iosInterstitialAdUnitId = 'ca-app-pub-9899607523942636/3420885198';
   
   // Test Ad Unit IDs (for development)
   static const String _testInterstitialAdUnitId = 'ca-app-pub-3940256099942544/1033173712';
@@ -28,6 +27,11 @@ class AdMobService {
   /// Initialize the Mobile Ads SDK
   static Future<void> initialize() async {
     try {
+      // Only initialize on mobile platforms (Android/iOS).
+      if (kIsWeb || !_isMobilePlatform) {
+        print('AdMob disabled: unsupported platform (web/desktop).');
+        return;
+      }
       await MobileAds.instance.initialize();
       print('AdMob SDK initialized successfully');
     } catch (e) {
@@ -40,17 +44,23 @@ class AdMobService {
     if (kDebugMode) {
       return _testInterstitialAdUnitId; // Use test ads in development
     }
-    
-    if (Platform.isAndroid) {
-      return _androidInterstitialAdUnitId;
-    } else if (Platform.isIOS) {
-      return _iosInterstitialAdUnitId;
+
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return _androidInterstitialAdUnitId;
+      case TargetPlatform.iOS:
+        return _iosInterstitialAdUnitId;
+      default:
+        return _testInterstitialAdUnitId;
     }
-    return _testInterstitialAdUnitId;
   }
 
   /// Load an interstitial ad
   void loadInterstitialAd() {
+    if (kIsWeb || !_isMobilePlatform) {
+      print('Skipping interstitial load: unsupported platform (web/desktop).');
+      return;
+    }
     if (_isInterstitialAdReady) {
       print('Interstitial ad already loaded');
       return;
@@ -110,6 +120,10 @@ class AdMobService {
   /// Show interstitial ad (respecting user experience - not too frequently)
   /// Returns true if ad was shown, false otherwise
   Future<bool> showInterstitialAd() async {
+    if (kIsWeb || !_isMobilePlatform) {
+      print('Skipping show interstitial: unsupported platform (web/desktop).');
+      return false;
+    }
     if (!_isInterstitialAdReady || _interstitialAd == null) {
       print('Interstitial ad not ready');
       loadInterstitialAd(); // Preload for next time
@@ -130,6 +144,9 @@ class AdMobService {
   /// Show ad after transaction (with frequency control)
   /// This respects user experience by not showing ads too frequently
   Future<void> showAdAfterTransaction() async {
+    if (kIsWeb || !_isMobilePlatform) {
+      return;
+    }
     _transactionCounter++;
     
     // Show ad only after specified number of transactions
@@ -144,6 +161,9 @@ class AdMobService {
 
   /// Dispose of the current interstitial ad
   void disposeInterstitialAd() {
+    if (kIsWeb || !_isMobilePlatform) {
+      return;
+    }
     _interstitialAd?.dispose();
     _interstitialAd = null;
     _isInterstitialAdReady = false;
@@ -152,6 +172,12 @@ class AdMobService {
   /// Reset transaction counter (useful for testing)
   void resetTransactionCounter() {
     _transactionCounter = 0;
+  }
+
+  // Helper: only Android/iOS should use AdMob
+  static bool get _isMobilePlatform {
+    return defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
   }
 }
 

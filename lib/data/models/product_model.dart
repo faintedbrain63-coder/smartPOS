@@ -67,6 +67,7 @@ class ProductModel extends Product {
     );
   }
 
+  @override
   ProductModel copyWith({
     int? id,
     String? name,

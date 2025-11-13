@@ -43,6 +43,7 @@ class SaleItemModel extends SaleItem {
     );
   }
 
+  @override
   SaleItemModel copyWith({
     int? id,
     int? saleId,

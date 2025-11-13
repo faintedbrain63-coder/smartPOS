@@ -910,7 +910,7 @@ class _OrderDetailsDialogState extends State<_OrderDetailsDialog> {
                   ),
                 ),
               );
-            }).toList(),
+            }),
           ],
         );
       },

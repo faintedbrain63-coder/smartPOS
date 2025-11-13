@@ -1,23 +1,35 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
   static Database? _database;
+  static Future<Database>? _databaseFuture;
 
   DatabaseHelper._internal();
 
   factory DatabaseHelper() => _instance;
 
   Future<Database> get database async {
-    _database ??= await _initDatabase();
-    return _database!;
+    if (_database != null) return _database!;
+    _databaseFuture ??= _initDatabase().then((db) {
+      _database = db;
+      return db;
+    });
+    return await _databaseFuture!;
   }
 
   Future<Database> _initDatabase() async {
-    final databasesPath = await getDatabasesPath();
-    final path = join(databasesPath, 'smartpos.db');
+    String path;
+    if (kIsWeb) {
+      // On web, use a simple file name; the factory handles storage (IndexedDB)
+      path = 'smartpos.db';
+    } else {
+      final databasesPath = await getDatabasesPath();
+      path = join(databasesPath, 'smartpos.db');
+    }
 
     return await openDatabase(
       path,
@@ -478,12 +490,19 @@ class DatabaseHelper {
     final db = await database;
     await db.close();
     _database = null;
+    _databaseFuture = null;
   }
 
   Future<void> deleteDatabase() async {
-    final databasesPath = await getDatabasesPath();
-    final path = join(databasesPath, 'smartpos.db');
+    String path;
+    if (kIsWeb) {
+      path = 'smartpos.db';
+    } else {
+      final databasesPath = await getDatabasesPath();
+      path = join(databasesPath, 'smartpos.db');
+    }
     await databaseFactory.deleteDatabase(path);
     _database = null;
+    _databaseFuture = null;
   }
 }

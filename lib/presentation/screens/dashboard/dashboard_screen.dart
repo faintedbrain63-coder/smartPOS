@@ -5,7 +5,6 @@ import '../../providers/sale_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/store_provider.dart';
 import '../../providers/currency_provider.dart';
-import '../../../core/utils/formatters.dart';
 import '../../../core/constants/app_constants.dart';
 import '../sales/sales_screen.dart';
 import '../inventory/inventory_screen.dart';
@@ -13,6 +12,7 @@ import '../analytics/analytics_screen.dart';
 import '../categories/categories_screen.dart';
 import '../barcode_scanner_screen.dart';
 import '../inventory/add_edit_product_screen.dart';
+import '../donation/donation_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -77,6 +77,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             icon: const Icon(Icons.refresh),
             onPressed: _refreshData,
             tooltip: 'Refresh Data',
+          ),
+          IconButton(
+            icon: const Icon(Icons.volunteer_activism),
+            onPressed: _navigateToDonation,
+            tooltip: 'Donate',
           ),
         ],
       ),
@@ -443,6 +448,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _navigateToCategories() {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (context) => const CategoriesScreen()),
+    );
+  }
+
+  void _navigateToDonation() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const DonationScreen()),
     );
   }
 

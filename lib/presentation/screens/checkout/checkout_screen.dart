@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/checkout_provider.dart';
 import '../../providers/currency_provider.dart';
-import '../../../domain/entities/product.dart';
 import 'order_confirmation_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
@@ -178,11 +177,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
       padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: Colors.grey.withOpacity(0.2)),
-      ),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: Colors.grey.withOpacity(0.2)),
+          ),
       height: 50, // Fixed height to ensure consistent spacing
       child: Row(
         children: [
@@ -216,7 +215,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           const SizedBox(width: 4), // Minimal spacing
           
           // Quantity controls - Compact design
-          Container(
+          SizedBox(
             width: 80,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -229,7 +228,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     width: 20,
                     height: 20,
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.1),
+          color: Colors.red.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(Icons.remove, size: 12, color: Colors.red),
@@ -240,7 +239,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   margin: const EdgeInsets.symmetric(horizontal: 4),
                   padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
                   decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.withOpacity(0.3)),
+            border: Border.all(color: Colors.grey.withOpacity(0.3)),
                     borderRadius: BorderRadius.circular(3),
                   ),
                   child: Text(
@@ -260,7 +259,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     width: 20,
                     height: 20,
                     decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.1),
+          color: Colors.green.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(Icons.add, size: 12, color: Colors.green),
@@ -298,7 +297,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     width: 20,
                     height: 20,
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.1),
+          color: Colors.red.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(Icons.delete_outline, size: 12, color: Colors.red),
@@ -313,6 +312,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Widget _buildTotalsSection(CheckoutProvider checkoutProvider, CurrencyProvider currencyProvider) {
+    final showDiscount = checkoutProvider.discountPercent > 0;
+    final showTax = checkoutProvider.taxPercent > 0;
+
     return Column(
       children: [
         Row(
@@ -321,7 +323,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             Text(
               'Items (${checkoutProvider.totalItemCount})',
               style: TextStyle(
-                fontSize: 12, // Reduced font size
+                fontSize: 12,
                 color: Theme.of(context).brightness == Brightness.dark 
                     ? Colors.grey[300] 
                     : Colors.black,
@@ -330,7 +332,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             Text(
               currencyProvider.formatPrice(checkoutProvider.subtotal),
               style: TextStyle(
-                fontSize: 12, // Reduced font size
+                fontSize: 12,
                 color: Theme.of(context).brightness == Brightness.dark 
                     ? Colors.grey[300] 
                     : Colors.black,
@@ -338,14 +340,64 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 6), // Reduced spacing
+        if (showDiscount) ...[
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Discount (${checkoutProvider.discountPercent.toStringAsFixed(0)}%)',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.red[600],
+                ),
+              ),
+              Text(
+                '-${currencyProvider.formatPrice(checkoutProvider.discountAmount)}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.red[600],
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ],
+        if (showTax) ...[
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Tax (${checkoutProvider.taxPercent.toStringAsFixed(0)}%)',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).brightness == Brightness.dark 
+                      ? Colors.grey[300] 
+                      : Colors.black,
+                ),
+              ),
+              Text(
+                '+${currencyProvider.formatPrice(checkoutProvider.taxAmount)}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).brightness == Brightness.dark 
+                      ? Colors.grey[300] 
+                      : Colors.black,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 6),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
               'Total',
               style: TextStyle(
-                fontSize: 16, // Reduced font size
+                fontSize: 16,
                 fontWeight: FontWeight.bold,
                 color: Theme.of(context).brightness == Brightness.dark 
                     ? Colors.grey[300] 
@@ -353,9 +405,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               ),
             ),
             Text(
-              currencyProvider.formatPrice(checkoutProvider.subtotal),
+              currencyProvider.formatPrice(checkoutProvider.total),
               style: const TextStyle(
-                fontSize: 16, // Reduced font size
+                fontSize: 16,
                 fontWeight: FontWeight.bold,
                 color: Colors.blue,
               ),
@@ -390,7 +442,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             : Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+          color: Colors.black.withOpacity(0.1),
             blurRadius: 4,
             offset: const Offset(0, -2),
           ),
@@ -580,10 +632,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             borderRadius: BorderRadius.circular(6), // Reduced border radius
             color: checkoutProvider.changeAmount >= 0 
                 ? (Theme.of(context).brightness == Brightness.dark 
-                    ? Colors.green[900]?.withOpacity(0.3) 
+                    ? Colors.green.shade900.withOpacity(0.3)
                     : Colors.green[50])
                 : (Theme.of(context).brightness == Brightness.dark 
-                    ? Colors.red[900]?.withOpacity(0.3) 
+                    ? Colors.red.shade900.withOpacity(0.3)
                     : Colors.red[50]),
           ),
           child: Column(
@@ -615,8 +667,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           runSpacing: 3,
           children: [
             ElevatedButton(
-              onPressed: () => checkoutProvider.setExactAmount(),
-              child: const Text('Exact', style: TextStyle(fontSize: 10)), // Reduced font size
+              onPressed: () => checkoutProvider.setExactAmount(), // Reduced font size
               style: ElevatedButton.styleFrom(
                 backgroundColor: Theme.of(context).brightness == Brightness.dark 
                     ? Colors.grey[700] 
@@ -627,10 +678,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3), // Reduced padding
                 minimumSize: const Size(40, 25), // Reduced size
               ),
+              child: const Text('Exact', style: TextStyle(fontSize: 10)),
             ),
             ElevatedButton(
-              onPressed: () => checkoutProvider.addQuickAmount(5),
-              child: const Text('+5', style: TextStyle(fontSize: 10)), // Reduced font size
+              onPressed: () => checkoutProvider.addQuickAmount(5), // Reduced font size
               style: ElevatedButton.styleFrom(
                 backgroundColor: Theme.of(context).brightness == Brightness.dark 
                     ? Colors.grey[700] 
@@ -641,10 +692,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3), // Reduced padding
                 minimumSize: const Size(40, 25), // Reduced size
               ),
+              child: const Text('+5', style: TextStyle(fontSize: 10)),
             ),
             ElevatedButton(
-              onPressed: () => checkoutProvider.addQuickAmount(10),
-              child: const Text('+10', style: TextStyle(fontSize: 10)), // Reduced font size
+              onPressed: () => checkoutProvider.addQuickAmount(10), // Reduced font size
               style: ElevatedButton.styleFrom(
                 backgroundColor: Theme.of(context).brightness == Brightness.dark 
                     ? Colors.grey[700] 
@@ -655,10 +706,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3), // Reduced padding
                 minimumSize: const Size(40, 25), // Reduced size
               ),
+              child: const Text('+10', style: TextStyle(fontSize: 10)),
             ),
             ElevatedButton(
-              onPressed: () => checkoutProvider.addQuickAmount(20),
-              child: const Text('+20', style: TextStyle(fontSize: 10)), // Reduced font size
+              onPressed: () => checkoutProvider.addQuickAmount(20), // Reduced font size
               style: ElevatedButton.styleFrom(
                 backgroundColor: Theme.of(context).brightness == Brightness.dark 
                     ? Colors.grey[700] 
@@ -669,6 +720,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3), // Reduced padding
                 minimumSize: const Size(40, 25), // Reduced size
               ),
+              child: const Text('+20', style: TextStyle(fontSize: 10)),
             ),
           ],
         ),

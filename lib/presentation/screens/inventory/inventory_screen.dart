@@ -5,7 +5,6 @@ import '../../providers/product_provider.dart';
 import '../../providers/category_provider.dart';
 import '../../providers/currency_provider.dart';
 import '../../../domain/entities/product.dart';
-import '../../../core/utils/formatters.dart';
 import '../../../core/constants/app_constants.dart';
 import 'add_edit_product_screen.dart';
 import 'product_details_screen.dart';
@@ -392,7 +391,7 @@ class _InventoryScreenState extends State<InventoryScreen>
                 width: 72,
                 height: 72,
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                  color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
                   borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
                   border: Border.all(
                     color: theme.colorScheme.outline.withOpacity(0.1),
@@ -574,7 +573,7 @@ class _InventoryScreenState extends State<InventoryScreen>
                       // Edit button
                       Container(
                         decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
+                          color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: IconButton(

@@ -78,24 +78,7 @@ class SettingsScreen extends StatelessWidget {
           
           const SizedBox(height: AppConstants.spacingLarge),
 
-          // Communication Section
-          _buildSettingsSection(
-            context,
-            'Communication',
-            Icons.message_outlined,
-            [
-              _buildSettingsTile(
-                context,
-                icon: Icons.contacts_outlined,
-                title: 'Contact No.',
-                subtitle: 'Manage owner contacts for SMS reports',
-                onTap: () => Navigator.pushNamed(context, '/owner-contacts'),
-                iconColor: Colors.orange,
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: AppConstants.spacingLarge),
+          // Communication section removed (SMS feature deprecation)
 
           // Data Management Section
           _buildSettingsSection(
@@ -304,21 +287,7 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  void _showComingSoonDialog(BuildContext context, String feature) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(feature),
-        content: Text('$feature functionality will be implemented soon.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
+  // Removed unused helper to satisfy lints; reintroduce when feature is used.
 
   void _showEditStoreNameDialog(BuildContext context, StoreProvider storeProvider) {
     final TextEditingController controller = TextEditingController(
@@ -344,17 +313,19 @@ class SettingsScreen extends StatelessWidget {
           ),
           TextButton(
             onPressed: () async {
+              final navigator = Navigator.of(context);
+              final messenger = ScaffoldMessenger.of(context);
               final newName = controller.text.trim();
               if (newName.isNotEmpty) {
                 final success = await storeProvider.updateStoreName(newName);
                 if (context.mounted) {
-                  Navigator.of(context).pop();
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  navigator.pop();
+                  messenger.showSnackBar(
                     SnackBar(
                       content: Text(
-                        success
-                            ? 'Store name updated successfully'
-                            : 'Failed to update store name',
+                          success
+                              ? 'Store name updated successfully'
+                              : 'Failed to update store name',
                       ),
                     ),
                   );
@@ -391,10 +362,12 @@ class SettingsScreen extends StatelessWidget {
                 subtitle: Text(currency.code),
                 trailing: isSelected ? const Icon(Icons.check, color: Colors.green) : null,
                 onTap: () async {
+                  final navigator = Navigator.of(context);
+                  final messenger = ScaffoldMessenger.of(context);
                   await currencyProvider.updateCurrency(currency);
                   if (context.mounted) {
-                    Navigator.of(context).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    navigator.pop();
+                    messenger.showSnackBar(
                       SnackBar(
                         content: Text('Currency changed to ${currency.name}'),
                       ),
@@ -432,16 +405,18 @@ class SettingsScreen extends StatelessWidget {
         ),
       );
 
+      final navigator = Navigator.of(context);
+      final messenger = ScaffoldMessenger.of(context);
       final databaseHelper = Provider.of<DatabaseHelper>(context, listen: false);
       final backupService = BackupService(databaseHelper);
       
       final filePath = await backupService.exportData();
       
       if (context.mounted) {
-        Navigator.of(context).pop(); // Close loading dialog
+        navigator.pop(); // Close loading dialog
         
         if (filePath != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          messenger.showSnackBar(
             SnackBar(
               content: Text('Backup saved successfully to chosen location'),
               backgroundColor: Colors.green,
@@ -452,7 +427,7 @@ class SettingsScreen extends StatelessWidget {
             ),
           );
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
+          messenger.showSnackBar(
             const SnackBar(
               content: Text('Backup creation cancelled'),
               backgroundColor: Colors.orange,
@@ -474,6 +449,14 @@ class SettingsScreen extends StatelessWidget {
   }
 
   void _restoreData(BuildContext context) async {
+    // Capture frequently used objects before any await
+    final theme = Theme.of(context);
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    // Capture providers before awaiting any async operations
+    final productProvider = Provider.of<ProductProvider>(context, listen: false);
+    final categoryProvider = Provider.of<CategoryProvider>(context, listen: false);
+    final saleProvider = Provider.of<SaleProvider>(context, listen: false);
     // Show confirmation dialog first
     final confirmed = await showDialog<bool>(
       context: context,
@@ -490,7 +473,7 @@ class SettingsScreen extends StatelessWidget {
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: theme.colorScheme.primary,
             ),
             child: const Text('Restore'),
           ),
@@ -522,28 +505,24 @@ class SettingsScreen extends StatelessWidget {
       final success = await backupService.pickAndImportData();
       
       if (context.mounted) {
-        Navigator.of(context).pop(); // Close loading dialog
+        navigator.pop(); // Close loading dialog
         
         if (success) {
-          // Refresh all providers
-          final productProvider = Provider.of<ProductProvider>(context, listen: false);
-          final categoryProvider = Provider.of<CategoryProvider>(context, listen: false);
-          final saleProvider = Provider.of<SaleProvider>(context, listen: false);
-          
+          // Refresh all providers using captured instances
           await Future.wait([
             productProvider.loadProducts(),
             categoryProvider.loadCategories(),
             saleProvider.loadSales(),
           ]);
           
-          ScaffoldMessenger.of(context).showSnackBar(
+          messenger.showSnackBar(
             const SnackBar(
               content: Text('Data restored successfully'),
               backgroundColor: Colors.green,
             ),
           );
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
+          messenger.showSnackBar(
             const SnackBar(
               content: Text('Data restore cancelled'),
               backgroundColor: Colors.orange,
@@ -553,8 +532,8 @@ class SettingsScreen extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        Navigator.of(context).pop(); // Close loading dialog
-        ScaffoldMessenger.of(context).showSnackBar(
+        navigator.pop(); // Close loading dialog
+        messenger.showSnackBar(
           SnackBar(
             content: Text('Failed to restore data: ${e.toString()}'),
             backgroundColor: Colors.red,
@@ -593,6 +572,9 @@ class SettingsScreen extends StatelessWidget {
   }
 
   void _clearAllData(BuildContext context) async {
+    // Capture navigator and messenger before any awaits to avoid context-synchronous usage
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
     try {
       // Show loading dialog
       showDialog(
@@ -608,35 +590,32 @@ class SettingsScreen extends StatelessWidget {
           ),
         ),
       );
-
+      // Capture dependencies before awaiting
       final databaseHelper = Provider.of<DatabaseHelper>(context, listen: false);
       final backupService = BackupService(databaseHelper);
+      final productProvider = Provider.of<ProductProvider>(context, listen: false);
+      final categoryProvider = Provider.of<CategoryProvider>(context, listen: false);
+      final saleProvider = Provider.of<SaleProvider>(context, listen: false);
       
       final success = await backupService.clearAllData();
       
       if (context.mounted) {
-        Navigator.of(context).pop(); // Close loading dialog
-        
+        navigator.pop(); // Close loading dialog
         if (success) {
-          // Refresh all providers
-          final productProvider = Provider.of<ProductProvider>(context, listen: false);
-          final categoryProvider = Provider.of<CategoryProvider>(context, listen: false);
-          final saleProvider = Provider.of<SaleProvider>(context, listen: false);
-          
+          // Refresh providers using captured instances
           await Future.wait([
             productProvider.loadProducts(),
             categoryProvider.loadCategories(),
             saleProvider.loadSales(),
           ]);
-          
-          ScaffoldMessenger.of(context).showSnackBar(
+          messenger.showSnackBar(
             const SnackBar(
               content: Text('All data cleared successfully'),
               backgroundColor: Colors.green,
             ),
           );
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
+          messenger.showSnackBar(
             const SnackBar(
               content: Text('Failed to clear data'),
               backgroundColor: Colors.red,
@@ -646,8 +625,8 @@ class SettingsScreen extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        Navigator.of(context).pop(); // Close loading dialog
-        ScaffoldMessenger.of(context).showSnackBar(
+        navigator.pop(); // Close loading dialog
+        messenger.showSnackBar(
           SnackBar(
             content: Text('Failed to clear data: ${e.toString()}'),
             backgroundColor: Colors.red,

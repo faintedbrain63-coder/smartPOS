@@ -4,7 +4,6 @@ import '../../providers/sale_provider.dart';
 import '../../providers/currency_provider.dart';
 import '../../../domain/entities/sale.dart';
 import '../../../core/constants/app_constants.dart';
-import '../../../core/utils/formatters.dart';
 import 'new_sale_screen.dart';
 
 class SalesScreen extends StatefulWidget {
@@ -113,7 +112,7 @@ class _SalesScreenState extends State<SalesScreen> {
                     Container(
                       width: 1,
                       height: 40,
-                      color: theme.colorScheme.onPrimaryContainer.withOpacity(0.3),
+        color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.3),
                     ),
                     Column(
                       children: [
@@ -216,7 +215,7 @@ class _SalesScreenState extends State<SalesScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.1),
+                color: Colors.green.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(

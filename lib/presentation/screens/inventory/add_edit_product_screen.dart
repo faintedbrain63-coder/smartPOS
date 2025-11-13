@@ -155,7 +155,7 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
                   width: 120,
                   height: 120,
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceVariant,
+                    color: theme.colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
                     border: Border.all(
                       color: theme.colorScheme.outline.withOpacity(0.5),
@@ -406,7 +406,7 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
                     return Container(
                       padding: const EdgeInsets.all(AppConstants.paddingMedium),
                       decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
+                        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
                         borderRadius: BorderRadius.circular(AppConstants.borderRadiusSmall),
                       ),
                       child: Row(

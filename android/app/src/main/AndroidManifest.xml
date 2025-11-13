@@ -1,6 +1,4 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- SMS Permission -->
-    <uses-permission android:name="android.permission.SEND_SMS" />
     <!-- Internet Permission for AdMob -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -13,7 +11,7 @@
         <!-- AdMob App ID -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-9899607523942636~8307623632"/>
+            android:value="ca-app-pub-9899607523942636~7868655843"/>
         
         <activity
             android:name=".MainActivity"

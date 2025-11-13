@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../providers/product_provider.dart';
 import '../../providers/category_provider.dart';
 import '../../providers/currency_provider.dart';
 import '../../../domain/entities/product.dart';
-import '../../../domain/entities/category.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/utils/formatters.dart';
 import 'add_edit_product_screen.dart';
@@ -134,7 +132,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               width: 150,
               height: 150,
               decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceVariant,
+                color: theme.colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
               ),
               child: _currentProduct.imagePath != null
@@ -192,7 +190,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 color: isOutOfStock
                     ? theme.colorScheme.errorContainer
                     : isLowStock
-                        ? Colors.orange.withOpacity(0.2)
+        ? Colors.orange.withValues(alpha: 0.2)
                         : theme.colorScheme.primaryContainer,
                 borderRadius: BorderRadius.circular(AppConstants.borderRadiusLarge),
               ),
@@ -359,7 +357,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
             Container(
               padding: const EdgeInsets.all(AppConstants.paddingMedium),
               decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(AppConstants.borderRadiusSmall),
               ),
               child: Row(
@@ -551,10 +549,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(AppConstants.paddingMedium),
               decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(AppConstants.borderRadiusSmall),
                 border: Border.all(
-                  color: theme.colorScheme.outline.withOpacity(0.5),
+        color: theme.colorScheme.outline.withValues(alpha: 0.5),
                 ),
               ),
               child: Text(

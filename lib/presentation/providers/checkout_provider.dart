@@ -34,10 +34,12 @@ class CheckoutProvider with ChangeNotifier {
 
   CheckoutProvider(this._saleRepository, this._productRepository);
 
-  List<CheckoutItem> _items = [];
+  final List<CheckoutItem> _items = [];
   double _paymentAmount = 0.0;
   String _paymentMethod = 'cash';
   String? _customerName;
+  double _discountPercent = 0.0;
+  double _taxPercent = 0.0;
   bool _isProcessing = false;
   String? _error;
 
@@ -46,13 +48,19 @@ class CheckoutProvider with ChangeNotifier {
   double get paymentAmount => _paymentAmount;
   String get paymentMethod => _paymentMethod;
   String? get customerName => _customerName;
+  double get discountPercent => _discountPercent;
+  double get taxPercent => _taxPercent;
   bool get isProcessing => _isProcessing;
   String? get error => _error;
 
   // Calculated values
   double get subtotal => _items.fold(0.0, (sum, item) => sum + item.totalPrice);
-  double get changeAmount => _paymentAmount - subtotal;
-  bool get hasValidPayment => _paymentAmount >= subtotal;
+  double get discountAmount => (subtotal * (_discountPercent.clamp(0.0, 100.0) / 100)).toDouble();
+  double get taxableBase => (subtotal - discountAmount);
+  double get taxAmount => (taxableBase * (_taxPercent.clamp(0.0, 100.0) / 100)).toDouble();
+  double get total => (taxableBase + taxAmount);
+  double get changeAmount => _paymentAmount - total;
+  bool get hasValidPayment => _paymentAmount >= total;
   bool get canCompleteCheckout => _items.isNotEmpty && hasValidPayment;
   int get totalItemCount => _items.fold(0, (sum, item) => sum + item.quantity);
 
@@ -134,6 +142,16 @@ class CheckoutProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  void setDiscountPercent(double percent) {
+    _discountPercent = percent.isNaN ? 0.0 : percent;
+    notifyListeners();
+  }
+
+  void setTaxPercent(double percent) {
+    _taxPercent = percent.isNaN ? 0.0 : percent;
+    notifyListeners();
+  }
+
   void setCustomerName(String? name) {
     _customerName = name;
     notifyListeners();
@@ -188,7 +206,7 @@ class CheckoutProvider with ChangeNotifier {
     try {
       // Create sale entity
       final sale = Sale(
-        totalAmount: subtotal,
+        totalAmount: total,
         customerName: _customerName,
         saleDate: DateTime.now(),
         paymentAmount: _paymentAmount,

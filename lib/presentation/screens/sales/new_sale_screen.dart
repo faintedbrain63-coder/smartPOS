@@ -3,16 +3,11 @@ import 'package:provider/provider.dart';
 import 'dart:io';
 import '../../providers/product_provider.dart';
 import '../../providers/cart_provider.dart';
-import '../../providers/sale_provider.dart';
 import '../../providers/category_provider.dart';
 import '../../providers/currency_provider.dart';
 import '../../providers/checkout_provider.dart';
 import '../../../domain/entities/product.dart';
-import '../../../domain/entities/category.dart';
-import '../../../domain/entities/sale.dart';
-import '../../../domain/entities/sale_item.dart';
 import '../../../core/constants/app_constants.dart';
-import '../../../core/utils/formatters.dart';
 import '../barcode_scanner_screen.dart';
 import '../checkout/checkout_screen.dart';
 
@@ -31,7 +26,6 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
   final TextEditingController _discountController = TextEditingController();
   final TextEditingController _taxController = TextEditingController();
   
-  bool _isProcessing = false;
   double _discount = 0.0;
   double _tax = 0.0;
 
@@ -248,7 +242,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
                   width: double.infinity,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(8),
-                    color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                    color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
                   ),
                   child: Stack(
                     children: [
@@ -378,7 +372,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
             color: theme.colorScheme.surface,
             border: Border(
               top: BorderSide(
-                color: theme.colorScheme.outline.withOpacity(0.2),
+        color: theme.colorScheme.outline.withValues(alpha: 0.2),
                 width: 1,
               ),
             ),
@@ -389,7 +383,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), // Further reduced padding
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.primaryContainer.withOpacity(0.3),
+        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
                 ),
                 child: Row(
                   children: [
@@ -414,7 +408,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
                           Text(
                             '${items.length} items',
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurface.withOpacity(0.7),
+        color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                               fontSize: 8, // Further reduced font size
                             ),
                           ),
@@ -430,7 +424,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
                         constraints: const BoxConstraints(minWidth: 20, minHeight: 20), // Reduced constraints
                         tooltip: 'Clear Cart',
                         style: IconButton.styleFrom(
-                          backgroundColor: theme.colorScheme.errorContainer.withOpacity(0.3),
+        backgroundColor: theme.colorScheme.errorContainer.withValues(alpha: 0.3),
                           foregroundColor: theme.colorScheme.error,
                         ),
                       ),
@@ -493,7 +487,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                    color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
                     border: Border(
                       top: BorderSide(
                         color: theme.colorScheme.outline.withOpacity(0.2),
@@ -519,7 +513,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
                                   ),
                                   prefixIcon: const Icon(Icons.discount_outlined, size: 16), // Reduced icon size
                                   filled: true,
-                                  fillColor: theme.colorScheme.surface.withOpacity(0.8),
+        fillColor: theme.colorScheme.surface.withValues(alpha: 0.8),
                                   contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Reduced padding
                                 ),
                                 style: TextStyle(fontSize: 11), // Reduced font size
@@ -546,7 +540,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
                                   ),
                                   prefixIcon: const Icon(Icons.receipt_long_outlined, size: 16), // Reduced icon size
                                   filled: true,
-                                  fillColor: theme.colorScheme.surface.withOpacity(0.8),
+        fillColor: theme.colorScheme.surface.withValues(alpha: 0.8),
                                   contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Reduced padding
                                 ),
                                 style: TextStyle(fontSize: 11), // Reduced font size
@@ -637,7 +631,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
                             decoration: BoxDecoration(
                               border: Border(
                                 top: BorderSide(
-                                  color: theme.colorScheme.outline.withOpacity(0.3),
+        color: theme.colorScheme.outline.withValues(alpha: 0.3),
                                 ),
                               ),
                             ),
@@ -676,22 +670,11 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
                         width: double.infinity,
                         height: 28,
                         child: ElevatedButton.icon(
-                          onPressed: _isProcessing ? null : _navigateToCheckout,
-                          icon: _isProcessing
-                              ? SizedBox(
-                                  width: 12,
-                                  height: 12,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      theme.colorScheme.onPrimary,
-                                    ),
-                                  ),
-                                )
-                              : const Icon(Icons.payment, size: 14),
-                          label: Text(
-                            _isProcessing ? 'Processing...' : 'Checkout',
-                            style: const TextStyle(fontSize: 10), // Smaller text
+                          onPressed: cartProvider.isEmpty ? null : _navigateToCheckout,
+                          icon: const Icon(Icons.payment, size: 14),
+                          label: const Text(
+                            'Checkout',
+                            style: TextStyle(fontSize: 10), // Smaller text
                           ),
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -735,7 +718,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
                 height: 40, // Reduced size
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(6),
-                  color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                  color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(6),
@@ -815,7 +798,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
               // Quantity controls
               Container(
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
+                  color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
                   borderRadius: BorderRadius.circular(8), // Reduced border radius
                 ),
                 child: Row(
@@ -906,7 +889,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
       leading: Container(
         padding: const EdgeInsets.all(4), // Reduced padding
         decoration: BoxDecoration(
-          color: theme.colorScheme.primaryContainer.withOpacity(0.5),
+        color: theme.colorScheme.primaryContainer.withOpacity(0.5),
           borderRadius: BorderRadius.circular(6), // Reduced border radius
         ),
         child: Icon(
@@ -930,7 +913,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
                   ),
                   prefixIcon: const Icon(Icons.person_outline, size: 16), // Reduced icon size
                   filled: true,
-                  fillColor: theme.colorScheme.surface.withOpacity(0.8),
+        fillColor: theme.colorScheme.surface.withOpacity(0.8),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Reduced padding
                 ),
                 style: TextStyle(fontSize: 11), // Reduced font size
@@ -949,7 +932,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
                   ),
                   prefixIcon: const Icon(Icons.phone_outlined, size: 16), // Reduced icon size
                   filled: true,
-                  fillColor: theme.colorScheme.surface.withOpacity(0.8),
+        fillColor: theme.colorScheme.surface.withOpacity(0.8),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Reduced padding
                 ),
                 style: TextStyle(fontSize: 11), // Reduced font size
@@ -962,314 +945,6 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
     );
   }
 
-  Widget _buildDiscountTaxSection() {
-    final theme = Theme.of(context);
-    
-    return ExpansionTile(
-      initiallyExpanded: false,
-      tilePadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), // Reduced padding
-      childrenPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Reduced padding
-      title: Text(
-        'Discount & Tax',
-        style: theme.textTheme.titleSmall?.copyWith(
-          fontWeight: FontWeight.w600,
-          fontSize: 11, // Reduced font size
-        ),
-      ),
-      leading: Container(
-        padding: const EdgeInsets.all(4), // Reduced padding
-        decoration: BoxDecoration(
-          color: theme.colorScheme.secondaryContainer.withOpacity(0.5),
-          borderRadius: BorderRadius.circular(6), // Reduced border radius
-        ),
-        child: Icon(
-          Icons.percent_rounded,
-          size: 16, // Reduced icon size
-          color: theme.colorScheme.secondary,
-        ),
-      ),
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: SizedBox(
-                height: 32, // Reduced height
-                child: TextField(
-                  controller: _discountController,
-                  decoration: InputDecoration(
-                    labelText: 'Discount (%)',
-                    labelStyle: TextStyle(fontSize: 10), // Reduced font size
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8), // Reduced border radius
-                    ),
-                    prefixIcon: const Icon(Icons.discount_outlined, size: 16), // Reduced icon size
-                    filled: true,
-                    fillColor: theme.colorScheme.surface.withOpacity(0.8),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Reduced padding
-                  ),
-                  style: TextStyle(fontSize: 11), // Reduced font size
-                  keyboardType: TextInputType.number,
-                  onChanged: (value) {
-                    setState(() {
-                      _discount = double.tryParse(value) ?? 0.0;
-                    });
-                  },
-                ),
-              ),
-            ),
-            const SizedBox(width: 8), // Reduced spacing
-            Expanded(
-              child: SizedBox(
-                height: 32, // Reduced height
-                child: TextField(
-                  controller: _taxController,
-                  decoration: InputDecoration(
-                    labelText: 'Tax (%)',
-                    labelStyle: TextStyle(fontSize: 10), // Reduced font size
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8), // Reduced border radius
-                    ),
-                    prefixIcon: const Icon(Icons.receipt_long_outlined, size: 16), // Reduced icon size
-                    filled: true,
-                    fillColor: theme.colorScheme.surface.withOpacity(0.8),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Reduced padding
-                  ),
-                  style: TextStyle(fontSize: 11), // Reduced font size
-                  keyboardType: TextInputType.number,
-                  onChanged: (value) {
-                    setState(() {
-                      _tax = double.tryParse(value) ?? 0.0;
-                    });
-                  },
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTotalSection() {
-    final theme = Theme.of(context);
-    
-    return Consumer<CartProvider>(
-      builder: (context, cartProvider, child) {
-        final subtotal = cartProvider.totalAmount;
-        final discountAmount = subtotal * (_discount / 100);
-        final taxableAmount = subtotal - discountAmount;
-        final taxAmount = taxableAmount * (_tax / 100);
-        final total = taxableAmount + taxAmount;
-
-        return Container(
-          margin: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                theme.colorScheme.primaryContainer.withOpacity(0.1),
-                theme.colorScheme.secondaryContainer.withOpacity(0.1),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: theme.colorScheme.outline.withOpacity(0.2),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: theme.colorScheme.shadow.withOpacity(0.1),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(
-                        Icons.receipt_long_rounded,
-                        color: theme.colorScheme.primary,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Order Summary',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                
-                const SizedBox(height: 16),
-                
-                // Subtotal
-                Consumer<CurrencyProvider>(
-                  builder: (context, currencyProvider, child) {
-                    return _buildSummaryRow(
-                      'Subtotal',
-                      currencyProvider.formatPrice(subtotal),
-                      theme,
-                    );
-                  },
-                ),
-                
-                // Discount
-                if (_discount > 0) ...[
-                  const SizedBox(height: 8),
-                  Consumer<CurrencyProvider>(
-                    builder: (context, currencyProvider, child) {
-                      return _buildSummaryRow(
-                        'Discount (${_discount.toStringAsFixed(1)}%)',
-                        '-${currencyProvider.formatPrice(discountAmount)}',
-                        theme,
-                        isDiscount: true,
-                      );
-                    },
-                  ),
-                ],
-                
-                // Tax
-                if (_tax > 0) ...[
-                  const SizedBox(height: 8),
-                  Consumer<CurrencyProvider>(
-                    builder: (context, currencyProvider, child) {
-                      return _buildSummaryRow(
-                        'Tax (${_tax.toStringAsFixed(1)}%)',
-                        currencyProvider.formatPrice(taxAmount),
-                        theme,
-                      );
-                    },
-                  ),
-                ],
-                
-                const SizedBox(height: 16),
-                
-                // Divider
-                Container(
-                  height: 1,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        theme.colorScheme.outline.withOpacity(0.1),
-                        theme.colorScheme.outline.withOpacity(0.3),
-                        theme.colorScheme.outline.withOpacity(0.1),
-                      ],
-                    ),
-                  ),
-                ),
-                
-                const SizedBox(height: 8), // Further reduced spacing
-                
-                // Total
-                Container(
-                  padding: const EdgeInsets.all(6), // Further reduced padding
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        theme.colorScheme.primary.withOpacity(0.1),
-                        theme.colorScheme.primary.withOpacity(0.05),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(6), // Further reduced border radius
-                    border: Border.all(
-                      color: theme.colorScheme.primary.withOpacity(0.2),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Total',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12, // Further reduced font size
-                        ),
-                      ),
-                      Consumer<CurrencyProvider>(
-                        builder: (context, currencyProvider, child) {
-                          return Text(
-                            currencyProvider.formatPrice(total),
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: theme.colorScheme.primary,
-                              fontSize: 12, // Further reduced font size
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(height: 6), // Further reduced spacing
-                
-                // Checkout Buttons
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: cartProvider.isEmpty ? null : _clearCart,
-                        icon: const Icon(Icons.clear_all_rounded, size: 14), // Smaller icon
-                        label: const Text('Clear', style: TextStyle(fontSize: 10)), // Smaller text
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 6), // Further reduced padding
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(6), // Further reduced border radius
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6), // Further reduced spacing
-                    Expanded(
-                      flex: 2,
-                      child: ElevatedButton.icon(
-                        onPressed: cartProvider.isEmpty || _isProcessing 
-                            ? null 
-                            : () => _navigateToCheckout(),
-                        icon: _isProcessing
-                            ? const SizedBox(
-                                height: 14, // Smaller loading indicator
-                                width: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.shopping_cart_checkout_rounded, size: 14), // Smaller icon
-                        label: Text(
-                          _isProcessing ? 'Processing...' : 'Checkout',
-                          style: const TextStyle(fontSize: 10), // Smaller text
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 6), // Further reduced padding
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(6), // Further reduced border radius
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 
   Widget _buildSummaryRow(String label, String value, ThemeData theme, {bool isDiscount = false}) {
     return Row(
@@ -1335,13 +1010,14 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
   }
 
   void _addProductByBarcode() async {
+    final messenger = ScaffoldMessenger.of(context);
     final barcode = _barcodeController.text.trim();
     if (barcode.isEmpty) return;
 
     final productProvider = Provider.of<ProductProvider>(context, listen: false);
     
     // Show loading indicator
-    ScaffoldMessenger.of(context).showSnackBar(
+    messenger.showSnackBar(
       const SnackBar(
         content: Row(
           children: [
@@ -1365,7 +1041,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
       final product = await productProvider.getProductByBarcode(barcode);
 
       if (product == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: Text(
               'Product with barcode "$barcode" not found',
@@ -1386,7 +1062,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
 
       // Check if product is out of stock
       if (product.stockQuantity <= 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: Text(
               '${product.name} is out of stock',
@@ -1403,7 +1079,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
       _barcodeController.clear();
       
       // Show success feedback
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text(
             '${product.name} added to cart',
@@ -1414,7 +1090,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
         ),
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text(
             'Error searching for product: $e',
@@ -1427,10 +1103,11 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
   }
 
   void _scanBarcode() async {
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
     try {
       // Import mobile_scanner at the top of the file
-      final result = await Navigator.push(
-        context,
+      final result = await navigator.push(
         MaterialPageRoute(
           builder: (context) => const BarcodeScannerScreen(),
         ),
@@ -1441,7 +1118,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
         _addProductByBarcode();
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text(
             'Error scanning barcode: $e',
@@ -1506,6 +1183,17 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
       checkoutProvider.setCustomerName(customerName);
     }
 
+    // Parse and pass discount/tax percentages
+    final discountText = _discountController.text.trim();
+    final taxText = _taxController.text.trim();
+
+    final discountPercent = double.tryParse(discountText) ?? 0.0;
+    final taxPercent = double.tryParse(taxText) ?? 0.0;
+
+    // Clamp values between 0 and 100 for safety
+    checkoutProvider.setDiscountPercent(discountPercent.clamp(0.0, 100.0));
+    checkoutProvider.setTaxPercent(taxPercent.clamp(0.0, 100.0));
+
     // Navigate to checkout screen
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -1514,29 +1202,38 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
     );
   }
 
-  Widget _buildProductPlaceholder(ThemeData theme, bool isOutOfStock) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            theme.colorScheme.primaryContainer.withOpacity(0.3),
-            theme.colorScheme.secondaryContainer.withOpacity(0.3),
-          ],
-        ),
-      ),
-      child: Center(
-        child: Icon(
-          Icons.inventory_2_outlined,
-          size: 20, // Reduced size
-          color: isOutOfStock 
-              ? theme.colorScheme.onSurface.withOpacity(0.4)
-              : theme.colorScheme.primary.withOpacity(0.6),
-        ),
-      ),
-    );
+  // Placeholder implementations to maintain structure; can be expanded later.
+  Widget _buildDiscountTaxSection() {
+    return const SizedBox.shrink();
   }
+
+  Widget _buildTotalSection() {
+    return const SizedBox.shrink();
+  }
+
+  Widget _buildProductPlaceholder(ThemeData theme, bool isOutOfStock) {
+      return Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+        theme.colorScheme.primaryContainer.withOpacity(0.3),
+        theme.colorScheme.secondaryContainer.withOpacity(0.3),
+            ],
+          ),
+        ),
+        child: Center(
+          child: Icon(
+            Icons.inventory_2_outlined,
+            size: 20, // Reduced size
+            color: isOutOfStock 
+        ? theme.colorScheme.onSurface.withOpacity(0.4)
+        : theme.colorScheme.primary.withOpacity(0.6),
+          ),
+        ),
+      );
+    }
 
   @override
   void dispose() {

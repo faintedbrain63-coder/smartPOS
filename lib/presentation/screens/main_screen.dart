@@ -10,7 +10,6 @@ import 'inventory/inventory_screen.dart';
 import 'sales/sales_screen.dart';
 import 'analytics/analytics_screen.dart';
 import 'settings/settings_screen.dart';
-import 'categories/categories_screen.dart';
 
 class MainScreen extends StatefulWidget {
   final int initialIndex;

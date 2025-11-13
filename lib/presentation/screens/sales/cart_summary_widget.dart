@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../core/utils/formatters.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/currency_provider.dart';
 
@@ -19,7 +18,7 @@ class CartSummaryWidget extends StatefulWidget {
   final Function(double) onTaxChanged;
 
   const CartSummaryWidget({
-    Key? key,
+    super.key,
     required this.theme,
     required this.subtotal,
     required this.discountAmount,
@@ -32,7 +31,7 @@ class CartSummaryWidget extends StatefulWidget {
     required this.onCompleteSale,
     required this.onDiscountChanged,
     required this.onTaxChanged,
-  }) : super(key: key);
+  });
 
   @override
   State<CartSummaryWidget> createState() => _CartSummaryWidgetState();
@@ -46,10 +45,10 @@ class _CartSummaryWidgetState extends State<CartSummaryWidget> {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: widget.theme.colorScheme.surfaceVariant.withOpacity(0.3),
+        color: widget.theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
             border: Border(
               top: BorderSide(
-                color: widget.theme.colorScheme.outline.withOpacity(0.2),
+        color: widget.theme.colorScheme.outline.withValues(alpha: 0.2),
               ),
             ),
           ),
@@ -202,7 +201,7 @@ class _CartSummaryWidgetState extends State<CartSummaryWidget> {
                     decoration: BoxDecoration(
                       border: Border(
                         top: BorderSide(
-                          color: widget.theme.colorScheme.outline.withOpacity(0.3),
+        color: widget.theme.colorScheme.outline.withValues(alpha: 0.3),
                         ),
                       ),
                     ),

@@ -195,11 +195,7 @@ class OrderProvider with ChangeNotifier {
       );
 
       // Update in database using repository
-      final updatedSale = await _saleRepository.updateSale(voidedOrder);
-      if (updatedSale == null) {
-        _setError('Failed to update order in database');
-        return false;
-      }
+      await _saleRepository.updateSale(voidedOrder);
 
       // Add audit entry
       await _insertAuditEntry(orderId, 'voided', reason);
