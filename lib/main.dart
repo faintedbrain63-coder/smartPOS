@@ -45,6 +45,9 @@ void main() async {
       print('Initialized sqflite_common_ffi for desktop ${Platform.operatingSystem}');
     }
     
+    // Reset database connection to ensure migrations run
+    print('🔄 Resetting database connection to trigger migrations...');
+    await DatabaseHelper().resetDatabase();
     
     // Initialize AdMob SDK
     await AdMobService.initialize();

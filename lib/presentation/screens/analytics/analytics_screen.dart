@@ -44,6 +44,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
       saleProvider.loadSales(),
       saleProvider.loadAnalytics(),
       saleProvider.loadAnalyticsForDateRange(_startDate, _endDate),
+      saleProvider.loadDashboardMetrics(), // Load dashboard metrics including today's revenue
       productProvider.loadProducts(),
     ]);
   }
@@ -294,9 +295,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
         ? (analytics['totalTransactions'] ?? 0).toString()
         : saleProvider.todaySalesCount.toString();
     
-    final salesAmount = _startDate != null && _endDate != null
+    // For revenue, use todayRevenueAmount which includes both sales AND paid credits
+    final revenueAmount = _startDate != null && _endDate != null
         ? (analytics['totalSales'] ?? 0.0) as double
-        : saleProvider.todaySalesAmount;
+        : saleProvider.todayRevenueAmount;
     
     final salesTitle = _startDate != null && _endDate != null
         ? 'Period Sales'
@@ -320,7 +322,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
         Expanded(
           child: _buildSummaryCard(
             revenueTitle,
-            currencyProvider.formatPrice(salesAmount),
+            currencyProvider.formatPrice(revenueAmount),
             Icons.attach_money,
             Colors.green,
           ),
@@ -1185,72 +1187,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     return spots;
   }
 
-  List<BarChartGroupData> _generateMonthlySalesBarGroups(SaleProvider saleProvider, ThemeData theme) {
-    // Use real sales data based on date range
-    if (_startDate != null && _endDate != null) {
-      return _generateMonthlySalesForRange(saleProvider, theme, _startDate!, _endDate!);
-    } else {
-      // Use last 6 months from today
-      final now = DateTime.now();
-      final endDate = DateTime(now.year, now.month, DateTime(now.year, now.month + 1, 0).day);
-      final startDate = DateTime(now.year, now.month - 5, 1);
-      
-      return _generateMonthlySalesForRange(saleProvider, theme, startDate, endDate);
-    }
-  }
-
-  List<BarChartGroupData> _generateMonthlySalesForRange(SaleProvider saleProvider, ThemeData theme, DateTime startDate, DateTime endDate) {
-    final barGroups = <BarChartGroupData>[];
-    
-    // Get sales data for the date range
-    final salesData = saleProvider.sales.where((sale) {
-      return sale.saleDate.isAfter(startDate.subtract(const Duration(days: 1))) &&
-             sale.saleDate.isBefore(endDate.add(const Duration(days: 1)));
-    }).toList();
-    
-    // Group sales by month and calculate totals
-    final monthlyTotals = <String, double>{};
-    
-    // Initialize months in the range
-    DateTime currentMonth = DateTime(startDate.year, startDate.month, 1);
-    final endMonth = DateTime(endDate.year, endDate.month, 1);
-    
-    while (currentMonth.isBefore(endMonth.add(const Duration(days: 32))) || 
-           currentMonth.isAtSameMomentAs(endMonth)) {
-      final monthKey = '${currentMonth.year}-${currentMonth.month.toString().padLeft(2, '0')}';
-      monthlyTotals[monthKey] = 0.0;
-      currentMonth = DateTime(currentMonth.year, currentMonth.month + 1, 1);
-    }
-    
-    // Aggregate sales by month
-    for (final sale in salesData) {
-      final monthKey = '${sale.saleDate.year}-${sale.saleDate.month.toString().padLeft(2, '0')}';
-      if (monthlyTotals.containsKey(monthKey)) {
-        monthlyTotals[monthKey] = monthlyTotals[monthKey]! + sale.totalAmount;
-      }
-    }
-    
-    // Convert to BarChartGroupData list
-    int index = 0;
-    for (final entry in monthlyTotals.entries) {
-      barGroups.add(
-        BarChartGroupData(
-          x: index,
-          barRods: [
-            BarChartRodData(
-              toY: entry.value,
-              color: theme.colorScheme.primary,
-              width: 20,
-            ),
-          ],
-        ),
-      );
-      index++;
-    }
-    
-    return barGroups;
-  }
-
   List<FlSpot> _generateRevenueSpots(SaleProvider saleProvider) {
     final spots = <FlSpot>[];
     
@@ -1381,45 +1317,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
         );
       },
     );
-  }
-
-  List<FlSpot> _generateRevenueFromData(SaleProvider saleProvider, DateTime startDate, DateTime endDate) {
-    final spots = <FlSpot>[];
-    
-    // Get sales data for the date range
-    final salesData = saleProvider.sales.where((sale) {
-      return sale.saleDate.isAfter(startDate.subtract(const Duration(days: 1))) &&
-             sale.saleDate.isBefore(endDate.add(const Duration(days: 1)));
-    }).toList();
-    
-    // Group sales by week and calculate totals
-    final weeklyTotals = <int, double>{};
-    
-    // Calculate number of weeks in the range
-    final daysDifference = endDate.difference(startDate).inDays + 1;
-    final numberOfWeeks = (daysDifference / 7).ceil();
-    
-    // Initialize weeks with 0
-    for (int i = 0; i < numberOfWeeks; i++) {
-      weeklyTotals[i] = 0.0;
-    }
-    
-    // Aggregate sales by week
-    for (final sale in salesData) {
-      final daysSinceStart = sale.saleDate.difference(startDate).inDays;
-      final weekIndex = (daysSinceStart / 7).floor();
-      
-      if (weekIndex >= 0 && weekIndex < numberOfWeeks) {
-        weeklyTotals[weekIndex] = (weeklyTotals[weekIndex] ?? 0.0) + sale.totalAmount;
-      }
-    }
-    
-    // Convert to FlSpot list
-    for (int i = 0; i < numberOfWeeks; i++) {
-      spots.add(FlSpot(i.toDouble(), weeklyTotals[i] ?? 0.0));
-    }
-    
-    return spots;
   }
 
   // Profit Analytics Section

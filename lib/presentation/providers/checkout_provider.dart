@@ -243,7 +243,19 @@ class CheckoutProvider with ChangeNotifier {
         paymentMethod: _paymentMethod,
         transactionStatus: _isCredit ? 'credit' : 'completed',
         dueDate: _isCredit ? _dueDate : null,
+        isCredit: _isCredit, // Explicit flag to differentiate sales from credits
       );
+
+      if (_isCredit) {
+        print('💳 CHECKOUT: Creating CREDIT with:');
+        print('   isCredit: ${sale.isCredit}');
+        print('   transactionStatus: ${sale.transactionStatus}');
+        print('   totalAmount: ${sale.totalAmount}');
+        print('   paymentAmount: ${sale.paymentAmount}');
+        print('   outstanding: ${sale.totalAmount - sale.paymentAmount}');
+        print('   dueDate: ${sale.dueDate}');
+        print('   customer: ${sale.customerName}');
+      }
 
       // Insert the sale
       final saleId = await _saleRepository.insertSale(sale);

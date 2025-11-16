@@ -15,6 +15,8 @@ class SaleRepositoryImpl implements SaleRepository {
     final db = await _databaseHelper.database;
     final List<Map<String, dynamic>> maps = await db.query(
       'sales',
+      where: 'is_credit = ?',
+      whereArgs: [0], // Only regular sales, not credits
       orderBy: 'sale_date DESC',
     );
 
@@ -43,8 +45,8 @@ class SaleRepositoryImpl implements SaleRepository {
     final db = await _databaseHelper.database;
     final List<Map<String, dynamic>> maps = await db.query(
       'sales',
-      where: 'DATE(sale_date) BETWEEN DATE(?) AND DATE(?)',
-      whereArgs: [startDate.toIso8601String(), endDate.toIso8601String()],
+      where: 'is_credit = ? AND DATE(sale_date) BETWEEN DATE(?) AND DATE(?)',
+      whereArgs: [0, startDate.toIso8601String(), endDate.toIso8601String()], // Only regular sales
       orderBy: 'sale_date DESC',
     );
 
@@ -231,6 +233,172 @@ class SaleRepositoryImpl implements SaleRepository {
       return true;
     } catch (e, stackTrace) {
       print('❌ DELETE CREDIT FAILED for sale_id=$saleId');
+      print('Error: $e');
+      print('Stack trace: $stackTrace');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> editSale({required int saleId, required Sale updatedSale, required List<SaleItem> updatedItems}) async {
+    final db = await _databaseHelper.database;
+    try {
+      print('✏️ EDIT SALE: Starting edit for sale_id=$saleId with ${updatedItems.length} items');
+      
+      // Verify sale exists before attempting edit
+      final saleCheck = await db.query('sales', where: 'id = ?', whereArgs: [saleId], limit: 1);
+      if (saleCheck.isEmpty) {
+        print('❌ EDIT SALE: Sale $saleId does not exist');
+        throw Exception('Sale $saleId does not exist');
+      }
+      
+      // Validate input
+      if (updatedItems.isEmpty) {
+        print('❌ EDIT SALE: Cannot update sale with zero items');
+        throw Exception('Sale must have at least one item');
+      }
+      
+      await db.transaction((txn) async {
+        // 1) Load existing quantities for delta computation
+        final oldItemRows = await txn.query('sale_items', where: 'sale_id = ?', whereArgs: [saleId]);
+        
+        if (oldItemRows.isEmpty) {
+          print('⚠️ EDIT SALE: Sale $saleId has no items in database');
+          throw Exception('Sale $saleId has no items - cannot edit');
+        }
+        
+        final Map<int, int> oldQtyByProduct = {};
+        for (final r in oldItemRows) {
+          final pid = r['product_id'] as int;
+          final qty = (r['quantity'] as int?) ?? 0;
+          oldQtyByProduct[pid] = (oldQtyByProduct[pid] ?? 0) + qty;
+        }
+        print('✏️ EDIT SALE: Old quantities: $oldQtyByProduct');
+
+        final Map<int, int> newQtyByProduct = {};
+        for (final item in updatedItems) {
+          if (item.quantity <= 0) {
+            throw Exception('Invalid quantity ${item.quantity} for product ${item.productId}');
+          }
+          newQtyByProduct[item.productId] = (newQtyByProduct[item.productId] ?? 0) + item.quantity;
+        }
+        print('✏️ EDIT SALE: New quantities: $newQtyByProduct');
+
+        // 2) Apply inventory delta per product
+        final Set<int> productIds = {...oldQtyByProduct.keys, ...newQtyByProduct.keys};
+        print('✏️ EDIT SALE: Processing ${productIds.length} unique products for inventory adjustments');
+        
+        for (final pid in productIds) {
+          final oldQty = oldQtyByProduct[pid] ?? 0;
+          final newQty = newQtyByProduct[pid] ?? 0;
+          final delta = newQty - oldQty;
+          
+          if (delta == 0) {
+            print('✏️ EDIT SALE: Product $pid - no quantity change (qty=$newQty)');
+            continue;
+          }
+
+          // Get product info for logging and validation
+          final productRows = await txn.query(
+            'products',
+            columns: ['stock_quantity', 'name'],
+            where: 'id = ?',
+            whereArgs: [pid],
+          );
+          
+          if (productRows.isEmpty) {
+            print('❌ EDIT SALE: Product $pid not found in database');
+            throw Exception('Product ID $pid not found');
+          }
+          
+          final currentStock = (productRows.first['stock_quantity'] as int?) ?? 0;
+          final productName = productRows.first['name'] as String?;
+
+          if (delta > 0) {
+            // Need more items - reduce stock
+            if (currentStock < delta) {
+              print('❌ EDIT SALE: Insufficient stock for "$productName" (ID: $pid) - need +$delta, have $currentStock');
+              throw Exception('Insufficient stock for "$productName" - need $delta more, but only $currentStock available');
+            }
+            final updatedCount = await txn.rawUpdate(
+              'UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?',
+              [delta, pid],
+            );
+            if (updatedCount > 0) {
+              print('✅ EDIT SALE: Stock decreased for "$productName" (ID: $pid): $currentStock → ${currentStock - delta} (-$delta)');
+            }
+          } else {
+            // Need fewer items - increase stock (return to inventory)
+            final returnQty = delta.abs();
+            final updatedCount = await txn.rawUpdate(
+              'UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ?',
+              [returnQty, pid],
+            );
+            if (updatedCount > 0) {
+              print('✅ EDIT SALE: Stock increased for "$productName" (ID: $pid): $currentStock → ${currentStock + returnQty} (+$returnQty)');
+            }
+          }
+        }
+
+        // 3) Recompute sale total from updated items
+        double newTotal = 0.0;
+        for (final item in updatedItems) {
+          newTotal += item.subtotal;
+        }
+        print('✏️ EDIT SALE: New total calculated: $newTotal (from ${updatedItems.length} items)');
+
+        // 4) Persist sale changes
+        final updatedMap = SaleModel.fromEntity(
+          updatedSale.copyWith(id: saleId, totalAmount: newTotal),
+        ).toMap();
+        updatedMap.remove('created_at'); // Don't change created_at timestamp
+
+        final updatedRows = await txn.update('sales', updatedMap, where: 'id = ?', whereArgs: [saleId]);
+        if (updatedRows == 0) {
+          throw Exception('Failed to update sale $saleId in sales table');
+        }
+        print('✅ EDIT SALE: Sale record updated (affected rows: $updatedRows)');
+
+        // 5) Replace items with updated set
+        final deletedItems = await txn.delete('sale_items', where: 'sale_id = ?', whereArgs: [saleId]);
+        print('✏️ EDIT SALE: Deleted $deletedItems old sale items');
+        
+        int insertedCount = 0;
+        for (final item in updatedItems) {
+          final map = SaleItemModel.fromEntity(item.copyWith(saleId: saleId)).toMap();
+          map.remove('id'); // Let database auto-generate new IDs
+          await txn.insert('sale_items', map);
+          insertedCount++;
+        }
+        print('✅ EDIT SALE: Inserted $insertedCount new sale items');
+
+        // 6) Audit
+        try {
+          final deltasSummary = productIds.map((pid) {
+            final oldQ = oldQtyByProduct[pid] ?? 0;
+            final newQ = newQtyByProduct[pid] ?? 0;
+            final d = newQ - oldQ;
+            return 'P$pid: $oldQ→$newQ (${d > 0 ? '+' : ''}$d)';
+          }).join(', ');
+          
+          await txn.insert('order_audit', {
+            'sale_id': saleId,
+            'action': 'updated',
+            'user_info': 'system',
+            'details': 'Sale edited: $deltasSummary',
+            'timestamp': DateTime.now().toIso8601String(),
+          });
+          print('✅ EDIT SALE: Audit entry created with delta summary');
+        } catch (auditError) {
+          // Audit is optional, don't fail the transaction
+          print('⚠️ EDIT SALE: Audit failed (non-critical): $auditError');
+        }
+      });
+      
+      print('🎉 EDIT SALE: Transaction completed successfully for sale_id=$saleId');
+      return true;
+    } catch (e, stackTrace) {
+      print('❌ EDIT SALE FAILED for sale_id=$saleId');
       print('Error: $e');
       print('Stack trace: $stackTrace');
       return false;
@@ -458,11 +626,11 @@ class SaleRepositoryImpl implements SaleRepository {
   Future<double> getTotalSalesAmount({DateTime? startDate, DateTime? endDate}) async {
     final db = await _databaseHelper.database;
     
-    String whereClause = '';
+    String whereClause = 'WHERE is_credit = 0'; // Only regular sales, not credits
     List<dynamic> whereArgs = [];
     
     if (startDate != null && endDate != null) {
-      whereClause = 'WHERE DATE(sale_date) BETWEEN DATE(?) AND DATE(?)';
+      whereClause = 'WHERE is_credit = 0 AND DATE(sale_date) BETWEEN DATE(?) AND DATE(?)';
       whereArgs = [startDate.toIso8601String(), endDate.toIso8601String()];
     }
     
@@ -478,11 +646,11 @@ class SaleRepositoryImpl implements SaleRepository {
   Future<int> getTotalSalesCount({DateTime? startDate, DateTime? endDate}) async {
     final db = await _databaseHelper.database;
     
-    String whereClause = '';
+    String whereClause = 'WHERE is_credit = 0'; // Only regular sales, not credits
     List<dynamic> whereArgs = [];
     
     if (startDate != null && endDate != null) {
-      whereClause = 'WHERE DATE(sale_date) BETWEEN DATE(?) AND DATE(?)';
+      whereClause = 'WHERE is_credit = 0 AND DATE(sale_date) BETWEEN DATE(?) AND DATE(?)';
       whereArgs = [startDate.toIso8601String(), endDate.toIso8601String()];
     }
     
@@ -503,7 +671,7 @@ class SaleRepositoryImpl implements SaleRepository {
     final result = await db.rawQuery('''
       SELECT DATE(sale_date) as date, COALESCE(SUM(total_amount), 0) as total
       FROM sales 
-      WHERE DATE(sale_date) >= DATE(?)
+      WHERE is_credit = 0 AND DATE(sale_date) >= DATE(?)
       GROUP BY DATE(sale_date)
       ORDER BY DATE(sale_date)
     ''', [startOfWeek.toIso8601String()]);
@@ -536,7 +704,7 @@ class SaleRepositoryImpl implements SaleRepository {
     final result = await db.rawQuery('''
       SELECT strftime('%Y-%m', sale_date) as month, COALESCE(SUM(total_amount), 0) as total
       FROM sales 
-      WHERE DATE(sale_date) >= DATE(?)
+      WHERE is_credit = 0 AND DATE(sale_date) >= DATE(?)
       GROUP BY strftime('%Y-%m', sale_date)
       ORDER BY strftime('%Y-%m', sale_date)
     ''', [startOfYear.toIso8601String()]);
@@ -571,15 +739,15 @@ class SaleRepositoryImpl implements SaleRepository {
   @override
   Future<double> getCustomerTotalCredit(int customerId) async {
     final db = await _databaseHelper.database;
-    final result = await db.rawQuery('SELECT COALESCE(SUM(total_amount),0) as total FROM sales WHERE customer_id = ? AND transaction_status = "credit"', [customerId]);
+    final result = await db.rawQuery('SELECT COALESCE(SUM(total_amount),0) as total FROM sales WHERE customer_id = ? AND is_credit = 1', [customerId]);
     return (result.first['total'] as num?)?.toDouble() ?? 0.0;
   }
 
   @override
   Future<double> getCustomerTotalPaid(int customerId) async {
     final db = await _databaseHelper.database;
-    final saleInitial = await db.rawQuery('SELECT COALESCE(SUM(payment_amount),0) as total FROM sales WHERE customer_id = ? AND transaction_status = "credit"', [customerId]);
-    final payments = await db.rawQuery('SELECT COALESCE(SUM(cp.amount),0) as total FROM credit_payments cp JOIN sales s ON s.id = cp.sale_id WHERE s.customer_id = ? AND s.transaction_status = "credit"', [customerId]);
+    final saleInitial = await db.rawQuery('SELECT COALESCE(SUM(payment_amount),0) as total FROM sales WHERE customer_id = ? AND is_credit = 1', [customerId]);
+    final payments = await db.rawQuery('SELECT COALESCE(SUM(cp.amount),0) as total FROM credit_payments cp JOIN sales s ON s.id = cp.sale_id WHERE s.customer_id = ? AND s.is_credit = 1', [customerId]);
     final initPaid = (saleInitial.first['total'] as num?)?.toDouble() ?? 0.0;
     final laterPaid = (payments.first['total'] as num?)?.toDouble() ?? 0.0;
     return initPaid + laterPaid;
@@ -593,7 +761,7 @@ class SaleRepositoryImpl implements SaleRepository {
              COALESCE((SELECT SUM(amount) FROM credit_payments WHERE sale_id = s.id),0) as later_paid,
              (s.total_amount - s.payment_amount - COALESCE((SELECT SUM(amount) FROM credit_payments WHERE sale_id = s.id),0)) as outstanding
       FROM sales s
-      WHERE s.customer_id = ? AND s.transaction_status = 'credit'
+      WHERE s.customer_id = ? AND s.is_credit = 1
       ORDER BY s.sale_date DESC
     ''', [customerId]);
     return rows;
@@ -631,9 +799,12 @@ class SaleRepositoryImpl implements SaleRepository {
   Future<List<Map<String, dynamic>>> getAllCreditsWithDetails({bool includeCompleted = false}) async {
     final db = await _databaseHelper.database;
     
+    // Use is_credit field for explicit filtering
+    // includeCompleted = true: show both paid and unpaid credits
+    // includeCompleted = false: show only unpaid/due credits
     String whereClause = includeCompleted 
-        ? 's.transaction_status IN ("credit", "completed")' 
-        : 's.transaction_status = "credit"';
+        ? 's.is_credit = 1' // All credits (paid and unpaid)
+        : 's.is_credit = 1 AND s.transaction_status = "credit"'; // Only unpaid credits
     
     final rows = await db.rawQuery('''
       SELECT 
@@ -655,6 +826,166 @@ class SaleRepositoryImpl implements SaleRepository {
     ''');
     
     return rows;
+  }
+
+  @override
+  Future<double> getTodayUnpaidCreditsAmount() async {
+    final db = await _databaseHelper.database;
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+    
+    print('📊 REPO: Getting today\'s unpaid credits...');
+    
+    // Get total amount of unpaid credits created today
+    final result = await db.rawQuery('''
+      SELECT COALESCE(SUM(s.total_amount), 0) as total
+      FROM sales s
+      WHERE s.is_credit = 1 
+        AND s.transaction_status = 'credit'
+        AND DATE(s.sale_date) BETWEEN DATE(?) AND DATE(?)
+    ''', [todayStart.toIso8601String(), todayEnd.toIso8601String()]);
+    
+    final amount = (result.first['total'] as num?)?.toDouble() ?? 0.0;
+    print('✅ REPO: Today\'s unpaid credits = \$${amount.toStringAsFixed(2)}');
+    return amount;
+  }
+
+  @override
+  Future<double> getTotalUnpaidCreditsAmount() async {
+    final db = await _databaseHelper.database;
+    
+    print('📊 REPO: Getting total unpaid credits (all-time)...');
+    print('═══════════════════════════════════════════════════');
+    
+    // First, let's see ALL credits in the database
+    final allCreditsDebug = await db.rawQuery('''
+      SELECT 
+        s.id,
+        s.is_credit,
+        s.total_amount,
+        s.payment_amount,
+        s.transaction_status,
+        s.customer_name,
+        COALESCE((SELECT SUM(amount) FROM credit_payments WHERE sale_id = s.id), 0) as later_paid,
+        (s.total_amount - s.payment_amount - COALESCE((SELECT SUM(amount) FROM credit_payments WHERE sale_id = s.id), 0)) as outstanding
+      FROM sales s
+      WHERE s.is_credit = 1
+      ORDER BY s.id DESC
+    ''');
+    
+    print('🔍 ALL CREDITS IN DATABASE (${allCreditsDebug.length} total):');
+    for (final row in allCreditsDebug) {
+      print('   ID ${row['id']}: ${row['customer_name']}');
+      print('      status=${row['transaction_status']}, is_credit=${row['is_credit']}');
+      print('      total=${row['total_amount']}, initial_paid=${row['payment_amount']}, later_paid=${row['later_paid']}');
+      print('      OUTSTANDING=${row['outstanding']}');
+    }
+    print('═══════════════════════════════════════════════════');
+    
+    // For UNPAID credits (status = 'credit'), sum the ORIGINAL total_amount
+    // This represents the total VALUE of all unpaid credits
+    // We don't use outstanding here because:
+    // 1. Outstanding can be negative (overpayment/data issues)
+    // 2. We want to show "how much credit is out there", not "how much is still owed after payments"
+    final result = await db.rawQuery('''
+      SELECT COALESCE(SUM(s.total_amount), 0) as total
+      FROM sales s
+      WHERE s.is_credit = 1 
+        AND s.transaction_status = 'credit'
+    ''');
+    
+    final amount = (result.first['total'] as num?)?.toDouble() ?? 0.0;
+    print('✅ REPO: Total unpaid credits (sum of original amounts) = \$${amount.toStringAsFixed(2)}');
+    
+    // Debug: Show only UNPAID credits
+    final unpaidDebug = await db.rawQuery('''
+      SELECT 
+        s.id,
+        s.customer_name,
+        s.total_amount,
+        s.payment_amount,
+        s.transaction_status,
+        COALESCE((SELECT SUM(amount) FROM credit_payments WHERE sale_id = s.id), 0) as later_paid,
+        (s.total_amount - s.payment_amount - COALESCE((SELECT SUM(amount) FROM credit_payments WHERE sale_id = s.id), 0)) as outstanding
+      FROM sales s
+      WHERE s.is_credit = 1 AND s.transaction_status = 'credit'
+    ''');
+    print('📋 UNPAID CREDITS ONLY (${unpaidDebug.length} credits):');
+    for (final row in unpaidDebug) {
+      print('   ID ${row['id']}: ${row['customer_name']}, total=\$${row['total_amount']}, outstanding=\$${row['outstanding']}');
+    }
+    print('═══════════════════════════════════════════════════');
+    
+    return amount;
+  }
+
+  @override
+  Future<double> getTotalRevenue() async {
+    final db = await _databaseHelper.database;
+    
+    print('📊 REPO: Calculating total revenue...');
+    
+    // Total Revenue = All completed sales + All paid credits (fully paid)
+    // 1. Get all sales (is_credit = 0)
+    final salesResult = await db.rawQuery('''
+      SELECT COALESCE(SUM(total_amount), 0) as total
+      FROM sales
+      WHERE is_credit = 0
+    ''');
+    final salesAmount = (salesResult.first['total'] as num?)?.toDouble() ?? 0.0;
+    print('  - All sales: \$${salesAmount.toStringAsFixed(2)}');
+    
+    // 2. Get all paid credits (is_credit = 1 AND transaction_status = 'completed')
+    final paidCreditsResult = await db.rawQuery('''
+      SELECT COALESCE(SUM(total_amount), 0) as total
+      FROM sales
+      WHERE is_credit = 1 
+        AND transaction_status = 'completed'
+    ''');
+    final paidCreditsAmount = (paidCreditsResult.first['total'] as num?)?.toDouble() ?? 0.0;
+    print('  - All paid credits: \$${paidCreditsAmount.toStringAsFixed(2)}');
+    
+    final totalRevenue = salesAmount + paidCreditsAmount;
+    print('✅ REPO: Total revenue = \$${totalRevenue.toStringAsFixed(2)}');
+    return totalRevenue;
+  }
+
+  @override
+  Future<double> getTodayRevenueAmount() async {
+    final db = await _databaseHelper.database;
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+    
+    print('📊 REPO: Calculating today\'s revenue (sales + paid credits)...');
+    
+    // Today's Revenue = Today's sales + Today's paid credits
+    // 1. Get today's sales (is_credit = 0)
+    final salesResult = await db.rawQuery('''
+      SELECT COALESCE(SUM(total_amount), 0) as total
+      FROM sales
+      WHERE is_credit = 0
+        AND DATE(sale_date) BETWEEN DATE(?) AND DATE(?)
+    ''', [todayStart.toIso8601String(), todayEnd.toIso8601String()]);
+    final salesAmount = (salesResult.first['total'] as num?)?.toDouble() ?? 0.0;
+    print('  - Today\'s sales: \$${salesAmount.toStringAsFixed(2)}');
+    
+    // 2. Get today's paid credits (is_credit = 1 AND transaction_status = 'completed' AND paid today)
+    // We check the sale_date to see when it was marked as completed/paid
+    final paidCreditsResult = await db.rawQuery('''
+      SELECT COALESCE(SUM(total_amount), 0) as total
+      FROM sales
+      WHERE is_credit = 1 
+        AND transaction_status = 'completed'
+        AND DATE(sale_date) BETWEEN DATE(?) AND DATE(?)
+    ''', [todayStart.toIso8601String(), todayEnd.toIso8601String()]);
+    final paidCreditsAmount = (paidCreditsResult.first['total'] as num?)?.toDouble() ?? 0.0;
+    print('  - Today\'s paid credits: \$${paidCreditsAmount.toStringAsFixed(2)}');
+    
+    final todayRevenue = salesAmount + paidCreditsAmount;
+    print('✅ REPO: Today\'s revenue = \$${todayRevenue.toStringAsFixed(2)}');
+    return todayRevenue;
   }
 
   @override
@@ -704,7 +1035,7 @@ class SaleRepositoryImpl implements SaleRepository {
       SELECT COALESCE(SUM(si.quantity), 0) as total
       FROM sale_items si
       INNER JOIN sales s ON si.sale_id = s.id
-      WHERE DATE(s.sale_date) = DATE(?)
+      WHERE s.is_credit = 0 AND DATE(s.sale_date) = DATE(?)
     ''', [now.toIso8601String()]);
     
     final productsSoldToday = (todayProductsSold.first['total'] as int?) ?? 0;
@@ -725,7 +1056,7 @@ class SaleRepositoryImpl implements SaleRepository {
     final result = await db.rawQuery('''
       SELECT DATE(sale_date) as date, COALESCE(SUM(total_amount), 0) as total
       FROM sales 
-      WHERE DATE(sale_date) BETWEEN DATE(?) AND DATE(?)
+      WHERE is_credit = 0 AND DATE(sale_date) BETWEEN DATE(?) AND DATE(?)
       GROUP BY DATE(sale_date)
       ORDER BY DATE(sale_date)
     ''', [startDate.toIso8601String(), endDate.toIso8601String()]);
@@ -757,7 +1088,7 @@ class SaleRepositoryImpl implements SaleRepository {
     final result = await db.rawQuery('''
       SELECT strftime('%Y-%m', sale_date) as month, COALESCE(SUM(total_amount), 0) as total
       FROM sales 
-      WHERE DATE(sale_date) BETWEEN DATE(?) AND DATE(?)
+      WHERE is_credit = 0 AND DATE(sale_date) BETWEEN DATE(?) AND DATE(?)
       GROUP BY strftime('%Y-%m', sale_date)
       ORDER BY strftime('%Y-%m', sale_date)
     ''', [startDate.toIso8601String(), endDate.toIso8601String()]);
@@ -794,7 +1125,7 @@ class SaleRepositoryImpl implements SaleRepository {
         strftime('%Y-%W', sale_date) as week,
         COALESCE(SUM(total_amount), 0) as total
       FROM sales 
-      WHERE DATE(sale_date) BETWEEN DATE(?) AND DATE(?)
+      WHERE is_credit = 0 AND DATE(sale_date) BETWEEN DATE(?) AND DATE(?)
       GROUP BY strftime('%Y-%W', sale_date)
       ORDER BY strftime('%Y-%W', sale_date)
     ''', [startDate.toIso8601String(), endDate.toIso8601String()]);
@@ -838,12 +1169,21 @@ class SaleRepositoryImpl implements SaleRepository {
   Future<double> getTotalProfitAmount({DateTime? startDate, DateTime? endDate}) async {
     final db = await _databaseHelper.database;
     
-    String whereClause = '';
+    print('📊 REPO: Calculating profit (sales + paid credits)...');
+    
+    // Build WHERE clause
+    // Profit should include:
+    // 1. All regular sales (is_credit = 0)
+    // 2. Only PAID credits (is_credit = 1 AND transaction_status = 'completed')
+    String whereClause = 'WHERE (s.is_credit = 0 OR (s.is_credit = 1 AND s.transaction_status = \'completed\'))';
     List<dynamic> whereArgs = [];
     
     if (startDate != null && endDate != null) {
-      whereClause = 'WHERE DATE(s.sale_date) BETWEEN DATE(?) AND DATE(?)';
+      whereClause += ' AND DATE(s.sale_date) BETWEEN DATE(?) AND DATE(?)';
       whereArgs = [startDate.toIso8601String(), endDate.toIso8601String()];
+      print('  - Date range: ${startDate.toLocal()} to ${endDate.toLocal()}');
+    } else {
+      print('  - All time');
     }
     
     final result = await db.rawQuery('''
@@ -854,13 +1194,21 @@ class SaleRepositoryImpl implements SaleRepository {
       $whereClause
     ''', whereArgs);
 
-    return (result.first['total_profit'] as num?)?.toDouble() ?? 0.0;
+    final profit = (result.first['total_profit'] as num?)?.toDouble() ?? 0.0;
+    print('✅ REPO: Total profit = \$${profit.toStringAsFixed(2)}');
+    
+    return profit;
   }
 
   @override
   Future<Map<String, double>> getDailyProfitForDateRange(DateTime startDate, DateTime endDate) async {
     final db = await _databaseHelper.database;
     
+    print('📊 REPO: Calculating daily profit for date range (sales + paid credits)...');
+    
+    // Profit should include:
+    // 1. All regular sales (is_credit = 0)
+    // 2. Only PAID credits (is_credit = 1 AND transaction_status = 'completed')
     final result = await db.rawQuery('''
       SELECT 
         DATE(s.sale_date) as date, 
@@ -868,7 +1216,8 @@ class SaleRepositoryImpl implements SaleRepository {
       FROM sale_items si
       INNER JOIN sales s ON si.sale_id = s.id
       INNER JOIN products p ON si.product_id = p.id
-      WHERE DATE(s.sale_date) BETWEEN DATE(?) AND DATE(?)
+      WHERE (s.is_credit = 0 OR (s.is_credit = 1 AND s.transaction_status = 'completed'))
+        AND DATE(s.sale_date) BETWEEN DATE(?) AND DATE(?)
       GROUP BY DATE(s.sale_date)
       ORDER BY DATE(s.sale_date)
     ''', [startDate.toIso8601String(), endDate.toIso8601String()]);

@@ -41,6 +41,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       productProvider.loadOutOfStockProducts(),
       saleProvider.loadTodaySales(),
       saleProvider.loadSalesAnalytics(),
+      saleProvider.loadDashboardMetrics(), // Load dashboard metrics
     ]);
   }
 
@@ -171,16 +172,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 _buildStatCard(
                   title: 'Today\'s Sales',
-                  value: currencyProvider.formatPrice(saleProvider.todayTotalSales ?? 0.0),
+                  value: currencyProvider.formatPrice(saleProvider.todayRevenueAmount),
                   icon: Icons.attach_money,
                   color: Colors.green,
                   isLoading: saleProvider.isLoading,
                 ),
                 _buildStatCard(
-                  title: 'Today\'s Credit',
+                  title: 'Today\'s Unpaid Credit',
                   value: currencyProvider.formatPrice(saleProvider.todayCreditAmount),
                   icon: Icons.credit_card,
                   color: Colors.purple,
+                  isLoading: saleProvider.isLoading,
+                ),
+                _buildStatCard(
+                  title: 'Total Unpaid Credits',
+                  value: currencyProvider.formatPrice(saleProvider.totalUnpaidCredits),
+                  icon: Icons.account_balance_wallet,
+                  color: Colors.deepPurple,
+                  isLoading: saleProvider.isLoading,
+                ),
+                _buildStatCard(
+                  title: 'Total Revenue',
+                  value: currencyProvider.formatPrice(saleProvider.totalRevenue),
+                  icon: Icons.trending_up,
+                  color: Colors.teal,
                   isLoading: saleProvider.isLoading,
                 ),
                 _buildStatCard(

@@ -10,6 +10,7 @@ class Sale {
   final double changeAmount;
   final String paymentMethod;
   final String transactionStatus;
+  final bool isCredit; // true = credit transaction, false = regular sale
 
   const Sale({
     this.id,
@@ -23,6 +24,7 @@ class Sale {
     this.changeAmount = 0.0,
     this.paymentMethod = 'cash',
     this.transactionStatus = 'completed',
+    this.isCredit = false, // Default to false for regular sales
   });
 
   Sale copyWith({
@@ -37,6 +39,7 @@ class Sale {
     double? changeAmount,
     String? paymentMethod,
     String? transactionStatus,
+    bool? isCredit,
   }) {
     return Sale(
       id: id ?? this.id,
@@ -50,6 +53,7 @@ class Sale {
       changeAmount: changeAmount ?? this.changeAmount,
       paymentMethod: paymentMethod ?? this.paymentMethod,
       transactionStatus: transactionStatus ?? this.transactionStatus,
+      isCredit: isCredit ?? this.isCredit,
     );
   }
 
@@ -64,7 +68,8 @@ class Sale {
         other.paymentAmount == paymentAmount &&
         other.changeAmount == changeAmount &&
         other.paymentMethod == paymentMethod &&
-        other.transactionStatus == transactionStatus;
+        other.transactionStatus == transactionStatus &&
+        other.isCredit == isCredit;
   }
 
   @override
@@ -76,7 +81,8 @@ class Sale {
         paymentAmount.hashCode ^
         changeAmount.hashCode ^
         paymentMethod.hashCode ^
-        transactionStatus.hashCode;
+        transactionStatus.hashCode ^
+        isCredit.hashCode;
   }
 
   @override

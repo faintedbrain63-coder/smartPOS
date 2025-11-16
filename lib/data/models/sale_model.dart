@@ -13,6 +13,7 @@ class SaleModel extends Sale {
     super.paymentMethod = 'cash',
     super.transactionStatus = 'completed',
     super.dueDate,
+    super.isCredit = false,
   });
 
   factory SaleModel.fromMap(Map<String, dynamic> map) {
@@ -30,6 +31,7 @@ class SaleModel extends Sale {
       paymentMethod: map['payment_method'] ?? 'cash',
       transactionStatus: map['transaction_status'] ?? 'completed',
       dueDate: map['due_date'] != null ? DateTime.parse(map['due_date']) : null,
+      isCredit: (map['is_credit'] ?? 0) == 1, // SQLite stores boolean as 0/1
     );
   }
 
@@ -46,6 +48,7 @@ class SaleModel extends Sale {
       'payment_method': paymentMethod,
       'transaction_status': transactionStatus,
       'due_date': dueDate?.toIso8601String(),
+      'is_credit': isCredit ? 1 : 0, // SQLite stores boolean as 0/1
     };
   }
 
@@ -62,6 +65,7 @@ class SaleModel extends Sale {
       paymentMethod: sale.paymentMethod,
       transactionStatus: sale.transactionStatus,
       dueDate: sale.dueDate,
+      isCredit: sale.isCredit,
     );
   }
 
@@ -78,6 +82,7 @@ class SaleModel extends Sale {
     String? transactionStatus,
     int? customerId,
     DateTime? dueDate,
+    bool? isCredit,
   }) {
     return SaleModel(
       id: id ?? this.id,
@@ -91,6 +96,7 @@ class SaleModel extends Sale {
       transactionStatus: transactionStatus ?? this.transactionStatus,
       customerId: customerId ?? this.customerId,
       dueDate: dueDate ?? this.dueDate,
+      isCredit: isCredit ?? this.isCredit,
     );
   }
 }

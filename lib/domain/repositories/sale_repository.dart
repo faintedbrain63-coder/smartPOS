@@ -13,6 +13,7 @@ abstract class SaleRepository {
   Future<int> deleteSale(int id);
   Future<bool> deleteSaleAndRestoreInventory(int saleId);
   Future<bool> editCreditSale({required int saleId, required Sale updatedSale, required List<SaleItem> updatedItems});
+  Future<bool> editSale({required int saleId, required Sale updatedSale, required List<SaleItem> updatedItems});
   
   // Sale Items
   Future<List<SaleItem>> getSaleItems(int saleId);
@@ -49,4 +50,10 @@ abstract class SaleRepository {
   
   // Enhanced credit queries for tabbed view
   Future<List<Map<String, dynamic>>> getAllCreditsWithDetails({bool includeCompleted = false});
+  
+  // Dashboard metrics
+  Future<double> getTodayUnpaidCreditsAmount();
+  Future<double> getTotalUnpaidCreditsAmount();
+  Future<double> getTotalRevenue();
+  Future<double> getTodayRevenueAmount();
 }

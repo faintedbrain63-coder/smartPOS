@@ -32,9 +32,12 @@ class SaleProvider with ChangeNotifier {
     _setError(null);
 
     try {
+      print('📊 SALE_PROVIDER: Loading sales...');
       _sales = await _saleRepository.getAllSales();
+      print('✅ SALE_PROVIDER: Loaded ${_sales.length} sales');
       notifyListeners();
     } catch (e) {
+      print('❌ SALE_PROVIDER: Error loading sales: $e');
       _setError('Failed to load sales: ${e.toString()}');
     } finally {
       _setLoading(false);
@@ -118,6 +121,7 @@ class SaleProvider with ChangeNotifier {
         loadSales(),
         loadAnalytics(),
         loadTodaySales(),
+        loadDashboardMetrics(), // Load new dashboard metrics
       ]);
       print('✅ PROVIDER: Comprehensive refresh complete - all listeners notified');
     } catch (e) {
@@ -256,14 +260,67 @@ class SaleProvider with ChangeNotifier {
     _setError(null);
 
     try {
-      final result = await _saleRepository.deleteSale(id);
-      if (result > 0) {
+      print('📱 PROVIDER: Deleting sale $id with inventory restoration...');
+      // Use deleteSaleAndRestoreInventory to restore products to stock
+      final result = await _saleRepository.deleteSaleAndRestoreInventory(id);
+      if (result) {
+        print('📱 PROVIDER: Sale deleted, inventory restored, triggering global refresh...');
         await refreshAllData(); // Refresh all data across app
+        print('✅ PROVIDER: Sale $id deleted successfully, inventory restored');
         return true;
       }
+      print('❌ PROVIDER: Failed to delete sale $id');
       return false;
     } catch (e) {
       _setError('Failed to delete sale: ${e.toString()}');
+      print('❌ PROVIDER: Error deleting sale $id: $e');
+      return false;
+    }
+  }
+
+  /// Edit a regular sale (completed or credit) with inventory adjustments
+  Future<bool> editSale(int saleId, Sale updatedSale, List<SaleItem> updatedItems) async {
+    _setError(null);
+    try {
+      print('📱 PROVIDER: Initiating edit for sale $saleId with ${updatedItems.length} items');
+      
+      // Validate items before sending to repository
+      for (final item in updatedItems) {
+        if (item.quantity <= 0) {
+          _setError('Invalid quantity ${item.quantity} for product ${item.productId}');
+          print('❌ PROVIDER: Validation failed - invalid quantity');
+          return false;
+        }
+      }
+      
+      // For credit sales, use the specialized editCreditSale method
+      if (updatedSale.transactionStatus == 'credit') {
+        return await editCreditSale(saleId, updatedSale, updatedItems);
+      }
+      
+      // For completed sales, use generic edit with inventory adjustment
+      final ok = await _saleRepository.editSale(
+        saleId: saleId,
+        updatedSale: updatedSale,
+        updatedItems: updatedItems,
+      );
+      
+      if (ok) {
+        print('📱 PROVIDER: Edit successful, refreshing all data...');
+        await refreshAllData();
+        print('✅ PROVIDER: EditSale completed - sale=$saleId saved; all data refreshed');
+        return true;
+      } else {
+        _setError('Failed to edit sale $saleId - repository returned false');
+        print('❌ PROVIDER: Edit returned false for sale $saleId');
+        return false;
+      }
+    } catch (e, stackTrace) {
+      final errorMsg = 'Failed to edit sale: ${e.toString()}';
+      _setError(errorMsg);
+      print('❌ PROVIDER: Edit exception for sale $saleId');
+      print('Error: $e');
+      print('Stack trace: $stackTrace');
       return false;
     }
   }
@@ -397,19 +454,59 @@ class SaleProvider with ChangeNotifier {
     return todaySales.length;
   }
 
+  // Dashboard metrics
+  double _todayUnpaidCredits = 0.0;
+  double _totalUnpaidCredits = 0.0;
+  double _totalRevenue = 0.0;
+  double _todayRevenueAmount = 0.0;
+
   double get todayTotalSales {
     return todaySalesAmount;
   }
 
   double get todayCreditAmount {
-    final today = DateTime.now();
-    final credits = _sales.where((sale) {
-      return sale.transactionStatus == 'credit' &&
-             sale.saleDate.year == today.year &&
-             sale.saleDate.month == today.month &&
-             sale.saleDate.day == today.day;
-    });
-    return credits.fold(0.0, (sum, sale) => sum + sale.totalAmount);
+    return _todayUnpaidCredits;
+  }
+
+  double get totalUnpaidCredits {
+    return _totalUnpaidCredits;
+  }
+
+  double get totalRevenue {
+    return _totalRevenue;
+  }
+
+  double get todayRevenueAmount {
+    return _todayRevenueAmount;
+  }
+
+  Future<void> loadDashboardMetrics() async {
+    try {
+      print('📊 PROVIDER: Loading dashboard metrics...');
+      
+      final results = await Future.wait([
+        _saleRepository.getTodayUnpaidCreditsAmount(),
+        _saleRepository.getTotalUnpaidCreditsAmount(),
+        _saleRepository.getTotalRevenue(),
+        _saleRepository.getTodayRevenueAmount(),
+      ]);
+      
+      _todayUnpaidCredits = results[0];
+      _totalUnpaidCredits = results[1];
+      _totalRevenue = results[2];
+      _todayRevenueAmount = results[3];
+      
+      print('✅ PROVIDER: Dashboard metrics loaded');
+      print('   - Today\'s unpaid credits: \$${_todayUnpaidCredits.toStringAsFixed(2)}');
+      print('   - Total unpaid credits: \$${_totalUnpaidCredits.toStringAsFixed(2)}');
+      print('   - Total revenue: \$${_totalRevenue.toStringAsFixed(2)}');
+      print('   - Today\'s revenue (sales + paid credits): \$${_todayRevenueAmount.toStringAsFixed(2)}');
+      
+      notifyListeners();
+    } catch (e) {
+      print('❌ PROVIDER: Error loading dashboard metrics: $e');
+      _setError('Failed to load dashboard metrics: ${e.toString()}');
+    }
   }
 
   // Sales Analytics methods

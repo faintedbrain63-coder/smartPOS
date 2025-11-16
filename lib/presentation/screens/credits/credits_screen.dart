@@ -72,20 +72,50 @@ class _CreditsScreenState extends State<CreditsScreen> with SingleTickerProvider
     
     List<Map<String, dynamic>> filtered = List.from(_allCredits);
     
+    print('🔍 CREDITS FILTER: Total credits loaded: ${_allCredits.length}');
+    print('🔍 CREDITS FILTER: Current tab index: ${_tabController!.index} (0=Unpaid, 1=Paid)');
+    
+    // Debug: Show all credits before filtering
+    for (final credit in _allCredits) {
+      final status = credit['transaction_status'] as String? ?? 'null';
+      final outstanding = (credit['outstanding'] as num?)?.toDouble() ?? 0.0;
+      final totalAmount = (credit['total_amount'] as num?)?.toDouble() ?? 0.0;
+      print('  ALL CREDITS: ID=${credit['sale_id']}, status=$status, outstanding=$outstanding, total=$totalAmount');
+    }
+    
     // Filter by tab (unpaid vs paid)
     if (_tabController!.index == 0) {
-      // Unpaid tab: show credits with outstanding > 0
+      // Unpaid tab: show credits with transaction_status = 'credit'
+      // Use status check first, then validate outstanding if needed
       filtered = filtered.where((credit) {
         final outstanding = (credit['outstanding'] as num?)?.toDouble() ?? 0.0;
-        return outstanding > 0;
+        final status = credit['transaction_status'] as String? ?? '';
+        
+        // A credit is unpaid if:
+        // 1. Status is 'credit' (not 'completed')
+        // 2. Has any outstanding amount (even if calculated as negative due to data issues)
+        //    OR has no outstanding calculated yet
+        final isUnpaid = status == 'credit';
+        
+        print('  UNPAID CHECK: Credit ${credit['sale_id']}: status=$status, outstanding=$outstanding, isUnpaid=$isUnpaid');
+        
+        return isUnpaid;
       }).toList();
+      print('✅ UNPAID FILTER: ${filtered.length} credits match');
     } else {
-      // Paid tab: show credits with outstanding <= 0 or status = completed
+      // Paid tab: show credits with transaction_status = 'completed' (fully paid)
       filtered = filtered.where((credit) {
         final outstanding = (credit['outstanding'] as num?)?.toDouble() ?? 0.0;
-        final status = credit['transaction_status'] as String?;
-        return outstanding <= 0 || status == 'completed';
+        final status = credit['transaction_status'] as String? ?? '';
+        
+        // CRITICAL FIX: A credit is paid if status is 'completed' AND outstanding <= 0
+        final isPaid = status == 'completed' && outstanding <= 0;
+        
+        print('  PAID CHECK: Credit ${credit['sale_id']}: status=$status, outstanding=$outstanding, isPaid=$isPaid');
+        
+        return isPaid;
       }).toList();
+      print('✅ PAID FILTER: ${filtered.length} credits match');
     }
     
     // Filter by date range
@@ -130,17 +160,25 @@ class _CreditsScreenState extends State<CreditsScreen> with SingleTickerProvider
     if (_tabController == null) return 0.0;
     
     if (_tabController!.index == 0) {
-      // Unpaid tab: sum of outstanding amounts
-      return credits.fold(0.0, (sum, credit) {
-        final outstanding = (credit['outstanding'] as num?)?.toDouble() ?? 0.0;
-        return sum + outstanding;
-      });
-    } else {
-      // Paid tab: sum of total amounts (fully paid)
-      return credits.fold(0.0, (sum, credit) {
+      // Unpaid tab: sum of ORIGINAL total_amount for all unpaid credits
+      // This shows the total VALUE of unpaid credits (not outstanding after payments)
+      // Outstanding can be negative due to overpayments, so we use total_amount instead
+      final total = credits.fold(0.0, (sum, credit) {
         final totalAmount = (credit['total_amount'] as num?)?.toDouble() ?? 0.0;
         return sum + totalAmount;
       });
+      
+      print('💰 CREDITS PAGE: Unpaid total = \$${total.toStringAsFixed(2)} (${credits.length} credits)');
+      return total;
+    } else {
+      // Paid tab: sum of total amounts (fully paid credits)
+      final total = credits.fold(0.0, (sum, credit) {
+        final totalAmount = (credit['total_amount'] as num?)?.toDouble() ?? 0.0;
+        return sum + totalAmount;
+      });
+      
+      print('💰 CREDITS PAGE: Paid total = \$${total.toStringAsFixed(2)} (${credits.length} credits)');
+      return total;
     }
   }
 

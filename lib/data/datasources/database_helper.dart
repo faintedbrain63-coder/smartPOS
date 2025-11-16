@@ -7,15 +7,37 @@ class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
   static Database? _database;
   static Future<Database>? _databaseFuture;
+  
+  // Track if we've already checked for is_credit column
+  bool _isCreditColumnChecked = false;
 
   DatabaseHelper._internal();
 
   factory DatabaseHelper() => _instance;
 
+  /// Force close and reset the database connection
+  /// This is useful to trigger migrations after code updates
+  Future<void> resetDatabase() async {
+    print('🔄 Resetting database connection...');
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+    _databaseFuture = null;
+    _isCreditColumnChecked = false; // Reset the check flag
+    print('✅ Database connection reset. Next access will reinitialize.');
+  }
+
   Future<Database> get database async {
-    if (_database != null) return _database!;
-    _databaseFuture ??= _initDatabase().then((db) {
+    if (_database != null) {
+      // CRITICAL: Always verify is_credit column exists before returning cached database
+      await _ensureIsCreditColumnExists(_database!);
+      return _database!;
+    }
+    _databaseFuture ??= _initDatabase().then((db) async {
       _database = db;
+      // Ensure column exists before returning new database
+      await _ensureIsCreditColumnExists(db);
       return db;
     });
     return await _databaseFuture!;
@@ -31,12 +53,93 @@ class DatabaseHelper {
       path = join(databasesPath, 'smartpos.db');
     }
 
-    return await openDatabase(
+    print('📂 Database path: $path');
+    print('🔢 Database version: 6');
+
+    final db = await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
+      onOpen: (db) async {
+        final version = await db.getVersion();
+        print('✅ Database opened successfully at version $version');
+      },
     );
+    
+    // CRITICAL FIX: Ensure is_credit column exists BEFORE returning database
+    // This MUST complete before any queries can run
+    print('🔒 Verifying database schema before use...');
+    await _ensureIsCreditColumnExists(db);
+    print('🔓 Database ready for use');
+    
+    return db;
+  }
+
+  /// Ensures the is_credit column exists in the sales table
+  /// This is a safety check in case migration didn't run properly
+  Future<void> _ensureIsCreditColumnExists(Database db) async {
+    // Only check once per database instance
+    if (_isCreditColumnChecked) return;
+    
+    try {
+      print('🔍 Checking if is_credit column exists...');
+      
+      // Check if is_credit column exists by querying table info
+      final columns = await db.rawQuery('PRAGMA table_info(sales)');
+      print('📋 Sales table has ${columns.length} columns');
+      
+      final hasIsCreditColumn = columns.any((col) => col['name'] == 'is_credit');
+      
+      if (!hasIsCreditColumn) {
+        print('⚠️ CRITICAL: is_credit column MISSING! Adding it now...');
+        
+        // Add column WITHOUT transaction first (ALTER TABLE doesn't work well in transactions)
+        try {
+          await db.execute('ALTER TABLE sales ADD COLUMN is_credit INTEGER NOT NULL DEFAULT 0');
+          print('✅ Column added');
+        } catch (e) {
+          print('⚠️ Error adding column (may already exist): $e');
+        }
+        
+        // Now update data and create indexes
+        await db.transaction((txn) async {
+          // Migrate existing data: Set is_credit=1 for credit transactions
+          print('🔄 Migrating existing data...');
+          await txn.execute('''
+            UPDATE sales 
+            SET is_credit = 1 
+            WHERE transaction_status = 'credit' 
+               OR due_date IS NOT NULL
+          ''');
+          
+          // Create indexes
+          print('🔄 Creating indexes...');
+          await txn.execute('CREATE INDEX IF NOT EXISTS idx_sales_is_credit ON sales (is_credit)');
+          await txn.execute('CREATE INDEX IF NOT EXISTS idx_sales_is_credit_status ON sales (is_credit, transaction_status)');
+        });
+        
+        // Update database version to 6
+        await db.setVersion(6);
+        
+        print('✅ FIXED: is_credit column added successfully');
+        
+        // Count migrated records
+        final creditCount = await db.rawQuery('SELECT COUNT(*) as count FROM sales WHERE is_credit = 1');
+        final count = creditCount.first['count'];
+        print('✅ Migrated $count existing credit records');
+      } else {
+        print('✅ is_credit column exists');
+      }
+      
+      _isCreditColumnChecked = true;
+    } catch (e, stackTrace) {
+      print('❌ CRITICAL ERROR checking/adding is_credit column: $e');
+      print('Stack trace: $stackTrace');
+      // Mark as checked even on error to avoid infinite loops
+      _isCreditColumnChecked = true;
+      rethrow; // Rethrow to surface the error
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -92,6 +195,7 @@ class DatabaseHelper {
         payment_method TEXT DEFAULT 'cash',
         transaction_status TEXT DEFAULT 'completed',
         due_date TEXT,
+        is_credit INTEGER NOT NULL DEFAULT 0,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE SET NULL
       )
@@ -169,6 +273,8 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX idx_sales_transaction_status ON sales (transaction_status)');
     await db.execute('CREATE INDEX idx_sales_payment_method ON sales (payment_method)');
     await db.execute('CREATE INDEX idx_sales_date_status ON sales (sale_date, transaction_status)');
+    await db.execute('CREATE INDEX idx_sales_is_credit ON sales (is_credit)');
+    await db.execute('CREATE INDEX idx_sales_is_credit_status ON sales (is_credit, transaction_status)');
     await db.execute('CREATE INDEX idx_order_audit_sale_id ON order_audit (sale_id)');
     await db.execute('CREATE INDEX idx_order_audit_timestamp ON order_audit (timestamp DESC)');
     await db.execute('CREATE INDEX idx_order_audit_action ON order_audit (action)');
@@ -210,6 +316,8 @@ class DatabaseHelper {
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    print('🔄 DATABASE UPGRADE: $oldVersion → $newVersion');
+    
     // Handle database upgrades here
     if (oldVersion < newVersion) {
       // Add customer_name column to sales table if upgrading from version 1
@@ -332,6 +440,31 @@ class DatabaseHelper {
 
         await db.execute('CREATE INDEX IF NOT EXISTS idx_sales_customer_id ON sales (customer_id)');
         await db.execute('CREATE INDEX IF NOT EXISTS idx_credit_payments_sale_id ON credit_payments (sale_id)');
+      }
+
+      // Version 6: Add is_credit field for explicit sale/credit separation
+      if (oldVersion <= 5 && newVersion >= 6) {
+        print('🔄 DATABASE MIGRATION v5 → v6: Adding is_credit field...');
+        
+        // Add is_credit column with default value 0 (false)
+        await db.execute('ALTER TABLE sales ADD COLUMN is_credit INTEGER NOT NULL DEFAULT 0');
+        
+        // Migrate existing data: Set is_credit=1 for credit transactions
+        // Credits are identified by transaction_status='credit' or having a due_date
+        await db.execute('''
+          UPDATE sales 
+          SET is_credit = 1 
+          WHERE transaction_status = 'credit' 
+             OR due_date IS NOT NULL
+        ''');
+        
+        print('✅ DATABASE MIGRATION: Updated ${await db.rawQuery('SELECT COUNT(*) as count FROM sales WHERE is_credit = 1').then((r) => r.first['count'])} records as credits');
+        
+        // Create indexes for better query performance
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_sales_is_credit ON sales (is_credit)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_sales_is_credit_status ON sales (is_credit, transaction_status)');
+        
+        print('✅ DATABASE MIGRATION v5 → v6: is_credit field added successfully');
       }
     }
   }
