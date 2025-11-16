@@ -88,6 +88,12 @@ class ThemeProvider with ChangeNotifier {
       elevation: 3,
       height: 80,
       labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+      labelTextStyle: MaterialStateProperty.resolveWith((states) {
+        if (states.contains(MaterialState.selected)) {
+          return const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: -0.1);
+        }
+        return const TextStyle(fontSize: 10, fontWeight: FontWeight.w500, letterSpacing: -0.1);
+      }),
       indicatorShape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
       ),
@@ -157,6 +163,12 @@ class ThemeProvider with ChangeNotifier {
       elevation: 3,
       height: 80,
       labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+      labelTextStyle: MaterialStateProperty.resolveWith((states) {
+        if (states.contains(MaterialState.selected)) {
+          return const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: -0.1);
+        }
+        return const TextStyle(fontSize: 10, fontWeight: FontWeight.w500, letterSpacing: -0.1);
+      }),
       indicatorShape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
       ),
