@@ -9,6 +9,7 @@ import '../../providers/currency_provider.dart';
 import '../../providers/product_provider.dart';
 import '../../providers/category_provider.dart';
 import '../../providers/sale_provider.dart';
+import '../../../core/services/notification_service.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -19,6 +20,7 @@ class SettingsScreen extends StatelessWidget {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final storeProvider = Provider.of<StoreProvider>(context);
     final currencyProvider = Provider.of<CurrencyProvider>(context);
+    bool notificationsEnabled = true;
 
     return Scaffold(
       appBar: AppBar(
@@ -54,6 +56,27 @@ class SettingsScreen extends StatelessWidget {
           ),
           
           const SizedBox(height: AppConstants.spacingLarge),
+
+          _buildSettingsSection(
+            context,
+            'Notifications',
+            Icons.notifications_active_outlined,
+            [
+              _buildSettingsTile(
+                context,
+                icon: Icons.notifications,
+                title: 'Credit Due Notifications',
+                subtitle: notificationsEnabled ? 'Enabled' : 'Disabled',
+                trailing: Switch.adaptive(
+                  value: notificationsEnabled,
+                  onChanged: (v) {
+                    notificationsEnabled = v;
+                    NotificationService.instance.setEnabled(v);
+                  },
+                ),
+              ),
+            ],
+          ),
 
           // Theme Section
           _buildSettingsSection(

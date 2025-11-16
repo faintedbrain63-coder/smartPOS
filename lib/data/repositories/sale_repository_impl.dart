@@ -109,6 +109,8 @@ class SaleRepositoryImpl implements SaleRepository {
     );
   }
 
+  
+
   @override
   Future<int> deleteSale(int id) async {
     final db = await _databaseHelper.database;
@@ -117,6 +119,289 @@ class SaleRepositoryImpl implements SaleRepository {
       where: 'id = ?',
       whereArgs: [id],
     );
+  }
+
+  @override
+  Future<bool> deleteSaleAndRestoreInventory(int saleId) async {
+    final db = await _databaseHelper.database;
+    try {
+      print('🗑️ DELETE CREDIT: Starting deletion for sale_id=$saleId');
+      
+      // Verify sale exists before attempting deletion
+      final saleCheck = await db.query('sales', where: 'id = ?', whereArgs: [saleId], limit: 1);
+      if (saleCheck.isEmpty) {
+        print('❌ DELETE CREDIT: Sale $saleId does not exist');
+        throw Exception('Sale $saleId does not exist');
+      }
+      
+      await db.transaction((txn) async {
+        // Business rule: delete must behave as if the credit never existed
+        // 1) Restore inventory quantities for all items in this sale
+        final items = await txn.query(
+          'sale_items',
+          where: 'sale_id = ?',
+          whereArgs: [saleId],
+        );
+
+        print('🗑️ DELETE CREDIT: Found ${items.length} items to restore');
+
+        if (items.isEmpty) {
+          print('⚠️ DELETE CREDIT: No items found for sale $saleId');
+        }
+
+        for (final row in items) {
+          final productId = row['product_id'] as int;
+          final qty = (row['quantity'] as int?) ?? 0;
+          if (qty > 0) {
+            // First check current stock
+            final productRows = await txn.query(
+              'products',
+              columns: ['stock_quantity', 'name'],
+              where: 'id = ?',
+              whereArgs: [productId],
+            );
+            
+            if (productRows.isEmpty) {
+              print('⚠️ DELETE CREDIT: Product $productId not found, skipping');
+              continue;
+            }
+            
+            final currentStock = (productRows.first['stock_quantity'] as int?) ?? 0;
+            final productName = productRows.first['name'] as String?;
+            
+            final updatedCount = await txn.rawUpdate(
+              'UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ?',
+              [qty, productId],
+            );
+            
+            if (updatedCount > 0) {
+              print('✅ DELETE CREDIT: Inventory restored for "$productName" (ID: $productId): $currentStock → ${currentStock + qty} (+$qty)');
+            } else {
+              print('❌ DELETE CREDIT: Failed to update inventory for product $productId');
+            }
+          }
+        }
+
+        // 2) Delete credit payments first (to respect foreign key constraints even though CASCADE should handle it)
+        final deletedPayments = await txn.delete(
+          'credit_payments',
+          where: 'sale_id = ?',
+          whereArgs: [saleId],
+        );
+        print('🗑️ DELETE CREDIT: Deleted $deletedPayments payment records');
+
+        // 3) Delete sale items (should cascade, but explicitly delete for clarity)
+        final deletedItems = await txn.delete(
+          'sale_items',
+          where: 'sale_id = ?',
+          whereArgs: [saleId],
+        );
+        print('🗑️ DELETE CREDIT: Deleted $deletedItems sale items');
+
+        // 4) Delete the sale record itself
+        final deletedRows = await txn.delete(
+          'sales',
+          where: 'id = ?',
+          whereArgs: [saleId],
+        );
+        
+        if (deletedRows == 0) {
+          throw Exception('Failed to delete sale $saleId from sales table');
+        }
+        
+        print('✅ DELETE CREDIT: Sale $saleId deleted from database (affected rows: $deletedRows)');
+
+        // 5) Audit (for traceability)
+        try {
+          await txn.insert('order_audit', {
+            'sale_id': saleId,
+            'action': 'deleted',
+            'user_info': 'system',
+            'details': 'Credit sale deleted and inventory restored: ${items.length} items, $deletedPayments payments',
+            'timestamp': DateTime.now().toIso8601String(),
+          });
+          print('✅ DELETE CREDIT: Audit entry created');
+        } catch (auditError) {
+          // Audit is optional, don't fail the transaction
+          print('⚠️ DELETE CREDIT: Audit failed (non-critical): $auditError');
+        }
+      });
+      
+      print('🎉 DELETE CREDIT: Transaction completed successfully for sale_id=$saleId');
+      return true;
+    } catch (e, stackTrace) {
+      print('❌ DELETE CREDIT FAILED for sale_id=$saleId');
+      print('Error: $e');
+      print('Stack trace: $stackTrace');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> editCreditSale({required int saleId, required Sale updatedSale, required List<SaleItem> updatedItems}) async {
+    final db = await _databaseHelper.database;
+    try {
+      print('✏️ EDIT CREDIT: Starting edit for sale_id=$saleId with ${updatedItems.length} items');
+      
+      // Verify sale exists before attempting edit
+      final saleCheck = await db.query('sales', where: 'id = ?', whereArgs: [saleId], limit: 1);
+      if (saleCheck.isEmpty) {
+        print('❌ EDIT CREDIT: Sale $saleId does not exist');
+        throw Exception('Sale $saleId does not exist');
+      }
+      
+      // Validate input
+      if (updatedItems.isEmpty) {
+        print('❌ EDIT CREDIT: Cannot update sale with zero items');
+        throw Exception('Sale must have at least one item');
+      }
+      
+      await db.transaction((txn) async {
+        // Business rule: edit must persist and adjust inventory by delta in one transaction
+        // 1) Load existing quantities for delta computation
+        final oldItemRows = await txn.query('sale_items', where: 'sale_id = ?', whereArgs: [saleId]);
+        
+        if (oldItemRows.isEmpty) {
+          print('⚠️ EDIT CREDIT: Sale $saleId has no items in database');
+          throw Exception('Sale $saleId has no items - cannot edit');
+        }
+        
+        final Map<int, int> oldQtyByProduct = {};
+        for (final r in oldItemRows) {
+          final pid = r['product_id'] as int;
+          final qty = (r['quantity'] as int?) ?? 0;
+          oldQtyByProduct[pid] = (oldQtyByProduct[pid] ?? 0) + qty;
+        }
+        print('✏️ EDIT CREDIT: Old quantities: $oldQtyByProduct');
+
+        final Map<int, int> newQtyByProduct = {};
+        for (final item in updatedItems) {
+          if (item.quantity <= 0) {
+            throw Exception('Invalid quantity ${item.quantity} for product ${item.productId}');
+          }
+          newQtyByProduct[item.productId] = (newQtyByProduct[item.productId] ?? 0) + item.quantity;
+        }
+        print('✏️ EDIT CREDIT: New quantities: $newQtyByProduct');
+
+        // 2) Apply inventory delta per product
+        final Set<int> productIds = {...oldQtyByProduct.keys, ...newQtyByProduct.keys};
+        print('✏️ EDIT CREDIT: Processing ${productIds.length} unique products for inventory adjustments');
+        
+        for (final pid in productIds) {
+          final oldQty = oldQtyByProduct[pid] ?? 0;
+          final newQty = newQtyByProduct[pid] ?? 0;
+          final delta = newQty - oldQty;
+          
+          if (delta == 0) {
+            print('✏️ EDIT CREDIT: Product $pid - no quantity change (qty=$newQty)');
+            continue;
+          }
+
+          // Get product info for logging and validation
+          final productRows = await txn.query(
+            'products',
+            columns: ['stock_quantity', 'name'],
+            where: 'id = ?',
+            whereArgs: [pid],
+          );
+          
+          if (productRows.isEmpty) {
+            print('❌ EDIT CREDIT: Product $pid not found in database');
+            throw Exception('Product ID $pid not found');
+          }
+          
+          final currentStock = (productRows.first['stock_quantity'] as int?) ?? 0;
+          final productName = productRows.first['name'] as String?;
+
+          if (delta > 0) {
+            // Need more items - reduce stock
+            if (currentStock < delta) {
+              print('❌ EDIT CREDIT: Insufficient stock for "$productName" (ID: $pid) - need +$delta, have $currentStock');
+              throw Exception('Insufficient stock for "$productName" - need $delta more, but only $currentStock available');
+            }
+            final updatedCount = await txn.rawUpdate(
+              'UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?',
+              [delta, pid],
+            );
+            if (updatedCount > 0) {
+              print('✅ EDIT CREDIT: Stock decreased for "$productName" (ID: $pid): $currentStock → ${currentStock - delta} (-$delta)');
+            }
+          } else {
+            // Need fewer items - increase stock (return to inventory)
+            final returnQty = delta.abs();
+            final updatedCount = await txn.rawUpdate(
+              'UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ?',
+              [returnQty, pid],
+            );
+            if (updatedCount > 0) {
+              print('✅ EDIT CREDIT: Stock increased for "$productName" (ID: $pid): $currentStock → ${currentStock + returnQty} (+$returnQty)');
+            }
+          }
+        }
+
+        // 3) Recompute sale total from updated items
+        double newTotal = 0.0;
+        for (final item in updatedItems) {
+          newTotal += item.subtotal;
+        }
+        print('✏️ EDIT CREDIT: New total calculated: $newTotal (from ${updatedItems.length} items)');
+
+        // 4) Persist sale changes
+        final updatedMap = SaleModel.fromEntity(
+          updatedSale.copyWith(id: saleId, totalAmount: newTotal),
+        ).toMap();
+        updatedMap.remove('created_at'); // Don't change created_at timestamp
+
+        final updatedRows = await txn.update('sales', updatedMap, where: 'id = ?', whereArgs: [saleId]);
+        if (updatedRows == 0) {
+          throw Exception('Failed to update sale $saleId in sales table');
+        }
+        print('✅ EDIT CREDIT: Sale record updated (affected rows: $updatedRows)');
+
+        // 5) Replace items with updated set
+        final deletedItems = await txn.delete('sale_items', where: 'sale_id = ?', whereArgs: [saleId]);
+        print('✏️ EDIT CREDIT: Deleted $deletedItems old sale items');
+        
+        int insertedCount = 0;
+        for (final item in updatedItems) {
+          final map = SaleItemModel.fromEntity(item.copyWith(saleId: saleId)).toMap();
+          map.remove('id'); // Let database auto-generate new IDs
+          await txn.insert('sale_items', map);
+          insertedCount++;
+        }
+        print('✅ EDIT CREDIT: Inserted $insertedCount new sale items');
+
+        // 6) Audit
+        try {
+          final deltasSummary = productIds.map((pid) {
+            final oldQ = oldQtyByProduct[pid] ?? 0;
+            final newQ = newQtyByProduct[pid] ?? 0;
+            final d = newQ - oldQ;
+            return 'P$pid: $oldQ→$newQ (${d > 0 ? '+' : ''}$d)';
+          }).join(', ');
+          
+          await txn.insert('order_audit', {
+            'sale_id': saleId,
+            'action': 'updated',
+            'user_info': 'system',
+            'details': 'Credit sale edited: $deltasSummary',
+            'timestamp': DateTime.now().toIso8601String(),
+          });
+          print('✅ EDIT CREDIT: Audit entry created with delta summary');
+        } catch (auditError) {
+          // Audit is optional, don't fail the transaction
+          print('⚠️ EDIT CREDIT: Audit failed (non-critical): $auditError');
+        }
+      });
+      
+      print('🎉 EDIT CREDIT: Transaction completed successfully for sale_id=$saleId');
+      return true;
+    } catch (e, stackTrace) {
+      print('❌ EDIT CREDIT FAILED for sale_id=$saleId');
+      print('Error: $e');
+      print('Stack trace: $stackTrace');
+      return false;
+    }
   }
 
   // Sale Items
@@ -272,6 +557,104 @@ class SaleRepositoryImpl implements SaleRepository {
     }
 
     return monthlySales;
+  }
+
+  @override
+  Future<List<Sale>> getCreditSales({String? status}) async {
+    final db = await _databaseHelper.database;
+    final where = status != null ? 'transaction_status = ?' : 'transaction_status = ?';
+    final args = status != null ? [status] : ['credit'];
+    final maps = await db.query('sales', where: where, whereArgs: args, orderBy: 'due_date ASC');
+    return maps.map((m) => SaleModel.fromMap(m)).toList();
+  }
+
+  @override
+  Future<double> getCustomerTotalCredit(int customerId) async {
+    final db = await _databaseHelper.database;
+    final result = await db.rawQuery('SELECT COALESCE(SUM(total_amount),0) as total FROM sales WHERE customer_id = ? AND transaction_status = "credit"', [customerId]);
+    return (result.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  @override
+  Future<double> getCustomerTotalPaid(int customerId) async {
+    final db = await _databaseHelper.database;
+    final saleInitial = await db.rawQuery('SELECT COALESCE(SUM(payment_amount),0) as total FROM sales WHERE customer_id = ? AND transaction_status = "credit"', [customerId]);
+    final payments = await db.rawQuery('SELECT COALESCE(SUM(cp.amount),0) as total FROM credit_payments cp JOIN sales s ON s.id = cp.sale_id WHERE s.customer_id = ? AND s.transaction_status = "credit"', [customerId]);
+    final initPaid = (saleInitial.first['total'] as num?)?.toDouble() ?? 0.0;
+    final laterPaid = (payments.first['total'] as num?)?.toDouble() ?? 0.0;
+    return initPaid + laterPaid;
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getCustomerLedger(int customerId) async {
+    final db = await _databaseHelper.database;
+    final rows = await db.rawQuery('''
+      SELECT s.id as sale_id, s.total_amount, s.payment_amount, s.due_date, s.sale_date,
+             COALESCE((SELECT SUM(amount) FROM credit_payments WHERE sale_id = s.id),0) as later_paid,
+             (s.total_amount - s.payment_amount - COALESCE((SELECT SUM(amount) FROM credit_payments WHERE sale_id = s.id),0)) as outstanding
+      FROM sales s
+      WHERE s.customer_id = ? AND s.transaction_status = 'credit'
+      ORDER BY s.sale_date DESC
+    ''', [customerId]);
+    return rows;
+  }
+
+  @override
+  Future<int> insertCreditPayment({required int saleId, required double amount, required DateTime paidAt, String? note}) async {
+    final db = await _databaseHelper.database;
+    final id = await db.insert('credit_payments', {
+      'sale_id': saleId,
+      'amount': amount,
+      'paid_at': paidAt.toIso8601String(),
+      'note': note,
+    });
+    final outstanding = await getOutstandingForSale(saleId);
+    if (outstanding <= 0) {
+      await db.update('sales', {'transaction_status': 'completed'}, where: 'id = ?', whereArgs: [saleId]);
+    }
+    return id;
+  }
+
+  @override
+  Future<double> getOutstandingForSale(int saleId) async {
+    final db = await _databaseHelper.database;
+    final result = await db.rawQuery('''
+      SELECT (s.total_amount - s.payment_amount - COALESCE(SUM(cp.amount),0)) as outstanding
+      FROM sales s
+      LEFT JOIN credit_payments cp ON cp.sale_id = s.id
+      WHERE s.id = ?
+    ''', [saleId]);
+    return (result.first['outstanding'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getAllCreditsWithDetails({bool includeCompleted = false}) async {
+    final db = await _databaseHelper.database;
+    
+    String whereClause = includeCompleted 
+        ? 's.transaction_status IN ("credit", "completed")' 
+        : 's.transaction_status = "credit"';
+    
+    final rows = await db.rawQuery('''
+      SELECT 
+        s.id as sale_id, 
+        s.total_amount, 
+        s.payment_amount, 
+        s.due_date, 
+        s.sale_date,
+        s.transaction_status,
+        s.customer_name,
+        s.customer_id,
+        s.created_at,
+        COALESCE((SELECT SUM(amount) FROM credit_payments WHERE sale_id = s.id),0) as later_paid,
+        (s.total_amount - s.payment_amount - COALESCE((SELECT SUM(amount) FROM credit_payments WHERE sale_id = s.id),0)) as outstanding,
+        (SELECT MAX(paid_at) FROM credit_payments WHERE sale_id = s.id) as last_payment_date
+      FROM sales s
+      WHERE $whereClause
+      ORDER BY s.sale_date DESC
+    ''');
+    
+    return rows;
   }
 
   @override

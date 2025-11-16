@@ -177,6 +177,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   isLoading: saleProvider.isLoading,
                 ),
                 _buildStatCard(
+                  title: 'Today\'s Credit',
+                  value: currencyProvider.formatPrice(saleProvider.todayCreditAmount),
+                  icon: Icons.credit_card,
+                  color: Colors.purple,
+                  isLoading: saleProvider.isLoading,
+                ),
+                _buildStatCard(
                   title: 'Total Products',
                   value: productProvider.products.length.toString(),
                   icon: Icons.inventory_2,

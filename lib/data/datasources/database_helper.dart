@@ -33,7 +33,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -69,18 +69,31 @@ class DatabaseHelper {
       )
     ''');
 
-    // Create sales table
+    await db.execute('''
+      CREATE TABLE customers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        phone TEXT,
+        email TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+
     await db.execute('''
       CREATE TABLE sales (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         total_amount REAL NOT NULL DEFAULT 0.0,
+        customer_id INTEGER,
         customer_name TEXT,
         sale_date TEXT NOT NULL,
         payment_amount REAL DEFAULT 0.0,
         change_amount REAL DEFAULT 0.0,
         payment_method TEXT DEFAULT 'cash',
         transaction_status TEXT DEFAULT 'completed',
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        due_date TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE SET NULL
       )
     ''');
 
@@ -135,6 +148,17 @@ class DatabaseHelper {
       )
     ''');
 
+    await db.execute('''
+      CREATE TABLE credit_payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sale_id INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        paid_at TEXT NOT NULL,
+        note TEXT,
+        FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE
+      )
+    ''');
+
     // Create indexes for better performance
     await db.execute('CREATE INDEX idx_products_category_id ON products (category_id)');
     await db.execute('CREATE INDEX idx_products_barcode ON products (barcode)');
@@ -153,6 +177,8 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX idx_sms_logs_contact_id ON sms_logs (contact_id)');
     await db.execute('CREATE INDEX idx_sms_logs_status ON sms_logs (status)');
     await db.execute('CREATE INDEX idx_sms_logs_sent_at ON sms_logs (sent_at DESC)');
+    await db.execute('CREATE INDEX idx_sales_customer_id ON sales (customer_id)');
+    await db.execute('CREATE INDEX idx_credit_payments_sale_id ON credit_payments (sale_id)');
 
     // Create triggers for updated_at timestamps
     await db.execute('''
@@ -237,7 +263,6 @@ class DatabaseHelper {
         ''');
       }
       
-      // Add SMS Sales Reports tables if upgrading from version 3
       if (oldVersion <= 3 && newVersion >= 4) {
         // Create owner_contacts table
         await db.execute('''
@@ -278,6 +303,35 @@ class DatabaseHelper {
             UPDATE owner_contacts SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
           END
         ''');
+      }
+
+      if (oldVersion <= 4 && newVersion >= 5) {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS customers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            phone TEXT,
+            email TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        ''');
+
+        await db.execute('ALTER TABLE sales ADD COLUMN customer_id INTEGER');
+        await db.execute('ALTER TABLE sales ADD COLUMN due_date TEXT');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS credit_payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sale_id INTEGER NOT NULL,
+            amount REAL NOT NULL,
+            paid_at TEXT NOT NULL,
+            note TEXT,
+            FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE
+          )
+        ''');
+
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_sales_customer_id ON sales (customer_id)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_credit_payments_sale_id ON credit_payments (sale_id)');
       }
     }
   }

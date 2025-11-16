@@ -8,6 +8,7 @@ import '../providers/currency_provider.dart';
 import 'dashboard/dashboard_screen.dart';
 import 'inventory/inventory_screen.dart';
 import 'sales/sales_screen.dart';
+import 'credits/credits_screen.dart';
 import 'analytics/analytics_screen.dart';
 import 'settings/settings_screen.dart';
 
@@ -27,6 +28,7 @@ class _MainScreenState extends State<MainScreen> {
     const DashboardScreen(),
     const InventoryScreen(),
     const SalesScreen(),
+    const CreditsScreen(),
     const AnalyticsScreen(),
     const SettingsScreen(),
   ];
@@ -86,6 +88,11 @@ class _MainScreenState extends State<MainScreen> {
             icon: Icon(Icons.shopping_cart_outlined),
             selectedIcon: Icon(Icons.shopping_cart),
             label: 'Sales',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.account_balance_wallet_outlined),
+            selectedIcon: Icon(Icons.account_balance_wallet),
+            label: 'Credits',
           ),
           NavigationDestination(
             icon: Icon(Icons.analytics_outlined),

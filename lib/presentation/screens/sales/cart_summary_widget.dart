@@ -45,10 +45,10 @@ class _CartSummaryWidgetState extends State<CartSummaryWidget> {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-        color: widget.theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        color: widget.theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
             border: Border(
               top: BorderSide(
-        color: widget.theme.colorScheme.outline.withValues(alpha: 0.2),
+        color: widget.theme.colorScheme.outline.withOpacity(0.2),
               ),
             ),
           ),
@@ -201,7 +201,7 @@ class _CartSummaryWidgetState extends State<CartSummaryWidget> {
                     decoration: BoxDecoration(
                       border: Border(
                         top: BorderSide(
-        color: widget.theme.colorScheme.outline.withValues(alpha: 0.3),
+        color: widget.theme.colorScheme.outline.withOpacity(0.3),
                         ),
                       ),
                     ),

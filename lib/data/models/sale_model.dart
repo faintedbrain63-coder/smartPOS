@@ -5,12 +5,14 @@ class SaleModel extends Sale {
     super.id,
     required super.totalAmount,
     super.customerName,
+    super.customerId,
     required super.saleDate,
     super.createdAt,
     super.paymentAmount = 0.0,
     super.changeAmount = 0.0,
     super.paymentMethod = 'cash',
     super.transactionStatus = 'completed',
+    super.dueDate,
   });
 
   factory SaleModel.fromMap(Map<String, dynamic> map) {
@@ -18,6 +20,7 @@ class SaleModel extends Sale {
       id: map['id']?.toInt(),
       totalAmount: map['total_amount']?.toDouble() ?? 0.0,
       customerName: map['customer_name'],
+      customerId: map['customer_id']?.toInt(),
       saleDate: DateTime.parse(map['sale_date']),
       createdAt: map['created_at'] != null 
           ? DateTime.parse(map['created_at'])
@@ -26,6 +29,7 @@ class SaleModel extends Sale {
       changeAmount: map['change_amount']?.toDouble() ?? 0.0,
       paymentMethod: map['payment_method'] ?? 'cash',
       transactionStatus: map['transaction_status'] ?? 'completed',
+      dueDate: map['due_date'] != null ? DateTime.parse(map['due_date']) : null,
     );
   }
 
@@ -33,6 +37,7 @@ class SaleModel extends Sale {
     return {
       'id': id,
       'total_amount': totalAmount,
+      'customer_id': customerId,
       'customer_name': customerName,
       'sale_date': saleDate.toIso8601String(),
       'created_at': createdAt?.toIso8601String(),
@@ -40,6 +45,7 @@ class SaleModel extends Sale {
       'change_amount': changeAmount,
       'payment_method': paymentMethod,
       'transaction_status': transactionStatus,
+      'due_date': dueDate?.toIso8601String(),
     };
   }
 
@@ -48,12 +54,14 @@ class SaleModel extends Sale {
       id: sale.id,
       totalAmount: sale.totalAmount,
       customerName: sale.customerName,
+      customerId: sale.customerId,
       saleDate: sale.saleDate,
       createdAt: sale.createdAt,
       paymentAmount: sale.paymentAmount,
       changeAmount: sale.changeAmount,
       paymentMethod: sale.paymentMethod,
       transactionStatus: sale.transactionStatus,
+      dueDate: sale.dueDate,
     );
   }
 
@@ -68,6 +76,8 @@ class SaleModel extends Sale {
     double? changeAmount,
     String? paymentMethod,
     String? transactionStatus,
+    int? customerId,
+    DateTime? dueDate,
   }) {
     return SaleModel(
       id: id ?? this.id,
@@ -79,6 +89,8 @@ class SaleModel extends Sale {
       changeAmount: changeAmount ?? this.changeAmount,
       paymentMethod: paymentMethod ?? this.paymentMethod,
       transactionStatus: transactionStatus ?? this.transactionStatus,
+      customerId: customerId ?? this.customerId,
+      dueDate: dueDate ?? this.dueDate,
     );
   }
 }

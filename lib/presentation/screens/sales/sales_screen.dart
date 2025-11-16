@@ -112,7 +112,7 @@ class _SalesScreenState extends State<SalesScreen> {
                     Container(
                       width: 1,
                       height: 40,
-        color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.3),
+                      color: theme.colorScheme.onPrimaryContainer.withOpacity(0.3),
                     ),
                     Column(
                       children: [
@@ -212,20 +212,7 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
             ),
             const SizedBox(height: 2),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                'Completed',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: Colors.green,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
+            _statusChip(sale, theme),
           ],
         ),
         onTap: () {
@@ -270,6 +257,37 @@ class _SalesScreenState extends State<SalesScreen> {
             child: const Text('Close'),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _statusChip(Sale sale, ThemeData theme) {
+    final status = sale.transactionStatus.toLowerCase();
+    Color color;
+    String label;
+    switch (status) {
+      case 'credit':
+        color = Colors.orange;
+        label = 'Credit';
+        break;
+      case 'completed':
+      default:
+        color = Colors.green;
+        label = 'Completed';
+        break;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        label,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: color,
+          fontWeight: FontWeight.w500,
+        ),
       ),
     );
   }

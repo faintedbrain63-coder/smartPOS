@@ -11,6 +11,8 @@ abstract class SaleRepository {
   Future<int> insertSale(Sale sale);
   Future<int> updateSale(Sale sale);
   Future<int> deleteSale(int id);
+  Future<bool> deleteSaleAndRestoreInventory(int saleId);
+  Future<bool> editCreditSale({required int saleId, required Sale updatedSale, required List<SaleItem> updatedItems});
   
   // Sale Items
   Future<List<SaleItem>> getSaleItems(int saleId);
@@ -37,4 +39,14 @@ abstract class SaleRepository {
   Future<Map<String, double>> getWeeklyProfitForDateRange(DateTime startDate, DateTime endDate);
   Future<Map<String, double>> getMonthlyProfitForDateRange(DateTime startDate, DateTime endDate);
   Future<Map<String, double>> getYearlyProfitForDateRange(DateTime startDate, DateTime endDate);
+
+  Future<List<Sale>> getCreditSales({String? status});
+  Future<double> getCustomerTotalCredit(int customerId);
+  Future<double> getCustomerTotalPaid(int customerId);
+  Future<List<Map<String, dynamic>>> getCustomerLedger(int customerId);
+  Future<int> insertCreditPayment({required int saleId, required double amount, required DateTime paidAt, String? note});
+  Future<double> getOutstandingForSale(int saleId);
+  
+  // Enhanced credit queries for tabbed view
+  Future<List<Map<String, dynamic>>> getAllCreditsWithDetails({bool includeCompleted = false});
 }

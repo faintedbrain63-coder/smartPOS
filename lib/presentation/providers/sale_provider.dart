@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../../domain/entities/sale.dart';
 import '../../domain/entities/sale_item.dart';
 import '../../domain/repositories/sale_repository.dart';
+import '../../core/services/notification_service.dart';
 
 class SaleProvider with ChangeNotifier {
   final SaleRepository _saleRepository;
@@ -218,6 +219,16 @@ class SaleProvider with ChangeNotifier {
 
       await loadSales(); // Reload sales list
       await loadAnalytics(); // Reload analytics
+      try {
+        if (sale.transactionStatus == 'credit' && sale.dueDate != null) {
+          NotificationService.instance.scheduleCreditDue(
+            saleId: saleId,
+            customerName: sale.customerName ?? '',
+            amount: sale.totalAmount,
+            dueDate: sale.dueDate!,
+          );
+        }
+      } catch (_) {}
       return true;
     } catch (e) {
       _setError('Failed to complete sale: ${e.toString()}');
@@ -238,6 +249,100 @@ class SaleProvider with ChangeNotifier {
       return false;
     } catch (e) {
       _setError('Failed to delete sale: ${e.toString()}');
+      return false;
+    }
+  }
+
+  Future<bool> deleteCreditSale(int id) async {
+    _setError(null);
+    try {
+      print('📱 PROVIDER: Initiating delete for credit sale $id');
+      final ok = await _saleRepository.deleteSaleAndRestoreInventory(id);
+      if (ok) {
+        print('📱 PROVIDER: Delete successful, refreshing state...');
+        await loadSales();
+        await loadAnalytics();
+        try {
+          NotificationService.instance.cancelForSale(id);
+          print('📱 PROVIDER: Notification cancelled for sale $id');
+        } catch (notifError) {
+          print('⚠️ PROVIDER: Failed to cancel notification: $notifError');
+        }
+        print('✅ PROVIDER: DeleteCredit completed - sale=$id removed; state refreshed');
+        return true;
+      } else {
+        _setError('Failed to delete credit sale $id - repository returned false');
+        print('❌ PROVIDER: Delete returned false for sale $id');
+        return false;
+      }
+    } catch (e, stackTrace) {
+      final errorMsg = 'Failed to delete credit sale: ${e.toString()}';
+      _setError(errorMsg);
+      print('❌ PROVIDER: Delete exception for sale $id');
+      print('Error: $e');
+      print('Stack trace: $stackTrace');
+      return false;
+    }
+  }
+
+  Future<bool> editCreditSale(int id, Sale updated, List<SaleItem> updatedItems) async {
+    _setError(null);
+    try {
+      print('📱 PROVIDER: Initiating edit for credit sale $id with ${updatedItems.length} items');
+      
+      // Validate items before sending to repository
+      for (final item in updatedItems) {
+        if (item.quantity <= 0) {
+          _setError('Invalid quantity ${item.quantity} for product ${item.productId}');
+          print('❌ PROVIDER: Validation failed - invalid quantity');
+          return false;
+        }
+      }
+      
+      final ok = await _saleRepository.editCreditSale(saleId: id, updatedSale: updated, updatedItems: updatedItems);
+      if (ok) {
+        print('📱 PROVIDER: Edit successful, updating in-memory state...');
+        final idx = _sales.indexWhere((s) => s.id == id);
+        if (idx != -1) {
+          _sales[idx] = updated.copyWith(id: id);
+          notifyListeners();
+          print('📱 PROVIDER: In-memory sales list updated at index $idx');
+        } else {
+          print('⚠️ PROVIDER: Sale $id not found in in-memory list, will refresh from DB');
+        }
+        
+        print('📱 PROVIDER: Refreshing analytics...');
+        await loadAnalytics();
+        
+        try {
+          if (updated.transactionStatus == 'credit' && updated.dueDate != null) {
+            NotificationService.instance.rescheduleCreditDue(
+              saleId: id,
+              customerName: updated.customerName ?? '',
+              amount: updated.totalAmount,
+              dueDate: updated.dueDate!,
+            );
+            print('📱 PROVIDER: Notification rescheduled for sale $id');
+          } else {
+            NotificationService.instance.cancelForSale(id);
+            print('📱 PROVIDER: Notification cancelled for sale $id');
+          }
+        } catch (notifError) {
+          print('⚠️ PROVIDER: Notification operation failed (non-critical): $notifError');
+        }
+        print('✅ PROVIDER: EditCredit completed - sale=$id saved; inventory adjusted; analytics refreshed');
+        return true;
+      } else {
+        _setError('Failed to edit credit sale $id - repository returned false');
+        print('❌ PROVIDER: Edit returned false for sale $id');
+        return false;
+      }
+    } catch (e, stackTrace) {
+      final errorMsg = 'Failed to edit credit sale: ${e.toString()}';
+      _setError(errorMsg);
+      print('❌ PROVIDER: Edit exception for sale $id');
+      print('Error: $e');
+      print('Stack trace: $stackTrace');
       return false;
     }
   }
@@ -290,6 +395,17 @@ class SaleProvider with ChangeNotifier {
 
   double get todayTotalSales {
     return todaySalesAmount;
+  }
+
+  double get todayCreditAmount {
+    final today = DateTime.now();
+    final credits = _sales.where((sale) {
+      return sale.transactionStatus == 'credit' &&
+             sale.saleDate.year == today.year &&
+             sale.saleDate.month == today.month &&
+             sale.saleDate.day == today.day;
+    });
+    return credits.fold(0.0, (sum, sale) => sum + sale.totalAmount);
   }
 
   // Sales Analytics methods

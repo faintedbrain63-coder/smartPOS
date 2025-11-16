@@ -372,7 +372,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
             color: theme.colorScheme.surface,
             border: Border(
               top: BorderSide(
-        color: theme.colorScheme.outline.withValues(alpha: 0.2),
+        color: theme.colorScheme.outline.withOpacity(0.2),
                 width: 1,
               ),
             ),
@@ -383,7 +383,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), // Further reduced padding
                 decoration: BoxDecoration(
-        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+        color: theme.colorScheme.primaryContainer.withOpacity(0.3),
                 ),
                 child: Row(
                   children: [
@@ -408,7 +408,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
                           Text(
                             '${items.length} items',
                             style: theme.textTheme.bodySmall?.copyWith(
-        color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+        color: theme.colorScheme.onSurface.withOpacity(0.7),
                               fontSize: 8, // Further reduced font size
                             ),
                           ),
@@ -424,7 +424,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
                         constraints: const BoxConstraints(minWidth: 20, minHeight: 20), // Reduced constraints
                         tooltip: 'Clear Cart',
                         style: IconButton.styleFrom(
-        backgroundColor: theme.colorScheme.errorContainer.withValues(alpha: 0.3),
+        backgroundColor: theme.colorScheme.errorContainer.withOpacity(0.3),
                           foregroundColor: theme.colorScheme.error,
                         ),
                       ),
@@ -513,7 +513,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
                                   ),
                                   prefixIcon: const Icon(Icons.discount_outlined, size: 16), // Reduced icon size
                                   filled: true,
-        fillColor: theme.colorScheme.surface.withValues(alpha: 0.8),
+        fillColor: theme.colorScheme.surface.withOpacity(0.8),
                                   contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Reduced padding
                                 ),
                                 style: TextStyle(fontSize: 11), // Reduced font size
@@ -540,7 +540,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
                                   ),
                                   prefixIcon: const Icon(Icons.receipt_long_outlined, size: 16), // Reduced icon size
                                   filled: true,
-        fillColor: theme.colorScheme.surface.withValues(alpha: 0.8),
+        fillColor: theme.colorScheme.surface.withOpacity(0.8),
                                   contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Reduced padding
                                 ),
                                 style: TextStyle(fontSize: 11), // Reduced font size
@@ -631,7 +631,7 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
                             decoration: BoxDecoration(
                               border: Border(
                                 top: BorderSide(
-        color: theme.colorScheme.outline.withValues(alpha: 0.3),
+        color: theme.colorScheme.outline.withOpacity(0.3),
                                 ),
                               ),
                             ),

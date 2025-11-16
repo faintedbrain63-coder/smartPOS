@@ -7,7 +7,10 @@ import 'dart:io';
 import 'data/datasources/database_helper.dart';
 import 'data/repositories/category_repository_impl.dart';
 import 'data/repositories/product_repository_impl.dart';
-import 'data/repositories/sale_repository_impl.dart';
+  import 'data/repositories/sale_repository_impl.dart';
+  import 'data/repositories/customer_repository_impl.dart';
+  import 'domain/repositories/customer_repository.dart';
+  import 'presentation/providers/customer_provider.dart';
 import 'presentation/providers/category_provider.dart';
 import 'presentation/providers/product_provider.dart';
 import 'presentation/providers/sale_provider.dart';
@@ -20,6 +23,7 @@ import 'presentation/providers/order_provider.dart';
 import 'presentation/screens/main_screen.dart';
 import 'core/constants/app_constants.dart';
 import 'core/services/admob_service.dart';
+import 'core/services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,6 +51,7 @@ void main() async {
     
     // Preload first interstitial ad
     AdMobService().loadInterstitialAd();
+    await NotificationService.instance.init();
     
     runApp(const SmartPOSApp());
   } catch (e) {
@@ -81,6 +86,9 @@ class SmartPOSApp extends StatelessWidget {
         ),
         ProxyProvider<DatabaseHelper, SaleRepositoryImpl>(
           update: (_, databaseHelper, __) => SaleRepositoryImpl(databaseHelper),
+        ),
+        ProxyProvider<DatabaseHelper, CustomerRepositoryImpl>(
+          update: (_, databaseHelper, __) => CustomerRepositoryImpl(databaseHelper),
         ),
         // Removed Contact and SMS-related repositories and services
         
@@ -117,6 +125,13 @@ class SmartPOSApp extends StatelessWidget {
         ),
         ChangeNotifierProvider<CurrencyProvider>(
           create: (_) => CurrencyProvider(),
+        ),
+        ChangeNotifierProxyProvider<CustomerRepositoryImpl, CustomerProvider>(
+          create: (context) => CustomerProvider(
+            Provider.of<CustomerRepositoryImpl>(context, listen: false),
+          ),
+          update: (_, repo, previous) => previous ?? CustomerProvider(repo),
+          lazy: false,
         ),
         ChangeNotifierProxyProvider2<SaleRepositoryImpl, ProductRepositoryImpl, CheckoutProvider>(
           create: (context) => CheckoutProvider(

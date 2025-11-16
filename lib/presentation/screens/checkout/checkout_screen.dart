@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../../providers/checkout_provider.dart';
 import '../../providers/currency_provider.dart';
 import 'order_confirmation_screen.dart';
+import '../../providers/customer_provider.dart';
+import '../../../domain/entities/customer.dart';
 
 class CheckoutScreen extends StatefulWidget {
   final List<Map<String, dynamic>>? initialCartItems;
@@ -19,6 +21,7 @@ class CheckoutScreen extends StatefulWidget {
 class _CheckoutScreenState extends State<CheckoutScreen> {
   final TextEditingController _customerNameController = TextEditingController();
   final TextEditingController _amountPaidController = TextEditingController();
+  DateTime? _selectedDueDate;
 
   @override
   void initState() {
@@ -426,8 +429,70 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           : Colors.grey[50],
       child: Column(
         children: [
+          Row(
+            children: [
+              Switch(
+                value: checkoutProvider.isCredit,
+                onChanged: (val) {
+                  checkoutProvider.setCreditMode(val);
+                },
+              ),
+              const SizedBox(width: 8),
+              Text(
+                checkoutProvider.isCredit ? 'Credit Mode' : 'Cash Mode',
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              const Spacer(),
+              if (checkoutProvider.isCredit)
+                TextButton(
+                  onPressed: () async {
+                    final now = DateTime.now();
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: _selectedDueDate ?? now.add(const Duration(days: 7)),
+                      firstDate: now,
+                      lastDate: now.add(const Duration(days: 365 * 5)),
+                    );
+                    if (picked != null) {
+                      setState(() {
+                        _selectedDueDate = picked;
+                      });
+                      checkoutProvider.setDueDate(picked);
+                    }
+                  },
+                  child: Text(
+                    checkoutProvider.dueDate != null
+                        ? 'Due: ${checkoutProvider.dueDate!.year}-${checkoutProvider.dueDate!.month.toString().padLeft(2, '0')}-${checkoutProvider.dueDate!.day.toString().padLeft(2, '0')}'
+                        : 'Set Due Date',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+            ],
+          ),
           // Payment input only (removed numeric keypad)
           _buildPaymentInput(checkoutProvider, currencyProvider),
+          if (checkoutProvider.isCredit)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _customerNameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Customer Name',
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      ),
+                      style: const TextStyle(fontSize: 12),
+                      onChanged: (v) {
+                        checkoutProvider.setCustomerName(v.isEmpty ? null : v);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -480,7 +545,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       Text('Processing...', style: TextStyle(fontSize: 14)),
                     ],
                   )
-                : const Text('Complete Payment'),
+                : Text(checkoutProvider.isCredit ? 'Record Credit Sale' : 'Complete Payment'),
           ),
         ),
       ),
@@ -520,6 +585,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               ),
               items: [
                 DropdownMenuItem(
+                  value: 'credit', 
+                  child: Text(
+                    'Credit',
+                    style: TextStyle(
+                      fontSize: 12, // Reduced font size
+                      color: Theme.of(context).textTheme.bodyMedium?.color,
+                    ),
+                  ),
+                ),
+                DropdownMenuItem(
                   value: 'cash', 
                   child: Text(
                     'Cash',
@@ -550,11 +625,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   ),
                 ),
               ],
-              onChanged: (value) {
-                if (value != null) {
-                  checkoutProvider.setPaymentMethod(value);
-                }
-              },
+              onChanged: checkoutProvider.isCredit
+                  ? null
+                  : (value) {
+                      if (value != null) {
+                        checkoutProvider.setPaymentMethod(value);
+                      }
+                    },
             ),
           ],
         ),
@@ -741,6 +818,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         ),
       );
       return;
+    }
+
+    if (checkoutProvider.isCredit && checkoutProvider.customerId == null) {
+      final name = _customerNameController.text.trim();
+      if (name.isNotEmpty) {
+        final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+        final id = await customerProvider.addCustomer(Customer(name: name));
+        if (id > 0) {
+          checkoutProvider.setCustomerId(id);
+        }
+      }
     }
 
     // Complete the checkout

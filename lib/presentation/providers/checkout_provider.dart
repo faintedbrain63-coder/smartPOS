@@ -42,6 +42,9 @@ class CheckoutProvider with ChangeNotifier {
   double _taxPercent = 0.0;
   bool _isProcessing = false;
   String? _error;
+  bool _isCredit = false;
+  DateTime? _dueDate;
+  int? _customerId;
 
   // Getters
   List<CheckoutItem> get items => _items;
@@ -52,6 +55,9 @@ class CheckoutProvider with ChangeNotifier {
   double get taxPercent => _taxPercent;
   bool get isProcessing => _isProcessing;
   String? get error => _error;
+  bool get isCredit => _isCredit;
+  DateTime? get dueDate => _dueDate;
+  int? get customerId => _customerId;
 
   // Calculated values
   double get subtotal => _items.fold(0.0, (sum, item) => sum + item.totalPrice);
@@ -60,8 +66,8 @@ class CheckoutProvider with ChangeNotifier {
   double get taxAmount => (taxableBase * (_taxPercent.clamp(0.0, 100.0) / 100)).toDouble();
   double get total => (taxableBase + taxAmount);
   double get changeAmount => _paymentAmount - total;
-  bool get hasValidPayment => _paymentAmount >= total;
-  bool get canCompleteCheckout => _items.isNotEmpty && hasValidPayment;
+  bool get hasValidPayment => _isCredit ? _paymentAmount >= 0 : _paymentAmount >= total;
+  bool get canCompleteCheckout => _items.isNotEmpty && (_isCredit || hasValidPayment);
   int get totalItemCount => _items.fold(0, (sum, item) => sum + item.quantity);
 
   // Cart management
@@ -157,6 +163,28 @@ class CheckoutProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  void setCreditMode(bool value) {
+    _isCredit = value;
+    if (_isCredit) {
+      _paymentMethod = 'credit';
+    } else {
+      _paymentMethod = 'cash';
+      _dueDate = null;
+      _customerId = null;
+    }
+    notifyListeners();
+  }
+
+  void setDueDate(DateTime? date) {
+    _dueDate = date;
+    notifyListeners();
+  }
+
+  void setCustomerId(int? id) {
+    _customerId = id;
+    notifyListeners();
+  }
+
   // Numeric keypad input
   void addDigitToPayment(String digit) {
     final currentString = _paymentAmount.toStringAsFixed(2).replaceAll('.', '');
@@ -208,11 +236,13 @@ class CheckoutProvider with ChangeNotifier {
       final sale = Sale(
         totalAmount: total,
         customerName: _customerName,
+        customerId: _customerId,
         saleDate: DateTime.now(),
         paymentAmount: _paymentAmount,
-        changeAmount: changeAmount,
+        changeAmount: _isCredit ? 0.0 : changeAmount,
         paymentMethod: _paymentMethod,
-        transactionStatus: 'completed',
+        transactionStatus: _isCredit ? 'credit' : 'completed',
+        dueDate: _isCredit ? _dueDate : null,
       );
 
       // Insert the sale
@@ -248,11 +278,8 @@ class CheckoutProvider with ChangeNotifier {
       // Return the completed sale with ID
       final completedSale = sale.copyWith(id: saleId);
       
-      // Clear the cart after successful checkout
       clearCart();
       
-      // Show interstitial ad after successful transaction (with frequency control)
-      // This respects user experience by not showing ads too frequently
       AdMobService().showAdAfterTransaction();
       
       return completedSale;
@@ -284,10 +311,19 @@ class CheckoutProvider with ChangeNotifier {
       return _error;
     }
     
-    if (_paymentAmount < subtotal) {
+    if (!_isCredit && _paymentAmount < subtotal) {
       return 'Insufficient payment amount';
     }
-    
+
+    if (_isCredit) {
+      if ((_customerName == null || _customerName!.isEmpty) && _customerId == null) {
+        return 'Customer is required for credit sale';
+      }
+      if (_dueDate == null) {
+        return 'Due date is required for credit sale';
+      }
+    }
+
     return null;
   }
 

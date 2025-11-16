@@ -3,6 +3,8 @@ class Sale {
   final double totalAmount;
   final DateTime saleDate;
   final String? customerName;
+  final int? customerId;
+  final DateTime? dueDate;
   final DateTime? createdAt;
   final double paymentAmount;
   final double changeAmount;
@@ -14,6 +16,8 @@ class Sale {
     required this.totalAmount,
     required this.saleDate,
     this.customerName,
+    this.customerId,
+    this.dueDate,
     this.createdAt,
     this.paymentAmount = 0.0,
     this.changeAmount = 0.0,
@@ -26,6 +30,8 @@ class Sale {
     double? totalAmount,
     DateTime? saleDate,
     String? customerName,
+    int? customerId,
+    DateTime? dueDate,
     DateTime? createdAt,
     double? paymentAmount,
     double? changeAmount,
@@ -37,6 +43,8 @@ class Sale {
       totalAmount: totalAmount ?? this.totalAmount,
       saleDate: saleDate ?? this.saleDate,
       customerName: customerName ?? this.customerName,
+      customerId: customerId ?? this.customerId,
+      dueDate: dueDate ?? this.dueDate,
       createdAt: createdAt ?? this.createdAt,
       paymentAmount: paymentAmount ?? this.paymentAmount,
       changeAmount: changeAmount ?? this.changeAmount,
