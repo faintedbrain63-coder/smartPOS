@@ -51,6 +51,21 @@ class ProductProvider with ChangeNotifier {
     }
   }
 
+  /// Silent refresh for inventory updates (called after sales/credits)
+  /// Does not show loading state to avoid UI flicker
+  Future<void> refreshInventory() async {
+    try {
+      print('🔄 PRODUCT_PROVIDER: Refreshing inventory after sales/credit operation...');
+      _products = await _productRepository.getAllProducts();
+      await _loadStockAlerts();
+      notifyListeners();
+      print('✅ PRODUCT_PROVIDER: Inventory refreshed successfully');
+    } catch (e) {
+      print('⚠️ PRODUCT_PROVIDER: Failed to refresh inventory: $e');
+      // Don't set error to avoid disrupting user flow
+    }
+  }
+
   Future<List<Product>> getProductsByCategory(int categoryId) async {
     try {
       return await _productRepository.getProductsByCategory(categoryId);

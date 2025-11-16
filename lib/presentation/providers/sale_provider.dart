@@ -109,6 +109,23 @@ class SaleProvider with ChangeNotifier {
     }
   }
 
+  /// Comprehensive refresh method that updates all sales-related data
+  /// This triggers notifyListeners() which causes all Consumer widgets to rebuild
+  Future<void> refreshAllData() async {
+    try {
+      print('🔄 PROVIDER: Starting comprehensive data refresh...');
+      await Future.wait([
+        loadSales(),
+        loadAnalytics(),
+        loadTodaySales(),
+      ]);
+      print('✅ PROVIDER: Comprehensive refresh complete - all listeners notified');
+    } catch (e) {
+      print('❌ PROVIDER: Error during comprehensive refresh: $e');
+      _setError('Failed to refresh data: ${e.toString()}');
+    }
+  }
+
   Future<List<Sale>> getSalesToday() async {
     try {
       return await _saleRepository.getSalesToday();
@@ -217,8 +234,7 @@ class SaleProvider with ChangeNotifier {
         await _saleRepository.insertSaleItem(updatedItem);
       }
 
-      await loadSales(); // Reload sales list
-      await loadAnalytics(); // Reload analytics
+      await refreshAllData(); // Refresh all data across app
       try {
         if (sale.transactionStatus == 'credit' && sale.dueDate != null) {
           NotificationService.instance.scheduleCreditDue(
@@ -242,8 +258,7 @@ class SaleProvider with ChangeNotifier {
     try {
       final result = await _saleRepository.deleteSale(id);
       if (result > 0) {
-        await loadSales(); // Reload to get updated list
-        await loadAnalytics(); // Reload analytics
+        await refreshAllData(); // Refresh all data across app
         return true;
       }
       return false;
@@ -260,8 +275,7 @@ class SaleProvider with ChangeNotifier {
       final ok = await _saleRepository.deleteSaleAndRestoreInventory(id);
       if (ok) {
         print('📱 PROVIDER: Delete successful, refreshing state...');
-        await loadSales();
-        await loadAnalytics();
+        await refreshAllData();
         try {
           NotificationService.instance.cancelForSale(id);
           print('📱 PROVIDER: Notification cancelled for sale $id');
@@ -301,18 +315,8 @@ class SaleProvider with ChangeNotifier {
       
       final ok = await _saleRepository.editCreditSale(saleId: id, updatedSale: updated, updatedItems: updatedItems);
       if (ok) {
-        print('📱 PROVIDER: Edit successful, updating in-memory state...');
-        final idx = _sales.indexWhere((s) => s.id == id);
-        if (idx != -1) {
-          _sales[idx] = updated.copyWith(id: id);
-          notifyListeners();
-          print('📱 PROVIDER: In-memory sales list updated at index $idx');
-        } else {
-          print('⚠️ PROVIDER: Sale $id not found in in-memory list, will refresh from DB');
-        }
-        
-        print('📱 PROVIDER: Refreshing analytics...');
-        await loadAnalytics();
+        print('📱 PROVIDER: Edit successful, refreshing all data...');
+        await refreshAllData();
         
         try {
           if (updated.transactionStatus == 'credit' && updated.dueDate != null) {
@@ -330,7 +334,7 @@ class SaleProvider with ChangeNotifier {
         } catch (notifError) {
           print('⚠️ PROVIDER: Notification operation failed (non-critical): $notifError');
         }
-        print('✅ PROVIDER: EditCredit completed - sale=$id saved; inventory adjusted; analytics refreshed');
+        print('✅ PROVIDER: EditCredit completed - sale=$id saved; inventory adjusted; all data refreshed');
         return true;
       } else {
         _setError('Failed to edit credit sale $id - repository returned false');

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/checkout_provider.dart';
 import '../../providers/currency_provider.dart';
+import '../../providers/sale_provider.dart';
+import '../../providers/product_provider.dart';
 import 'order_confirmation_screen.dart';
 import '../../providers/customer_provider.dart';
 import '../../../domain/entities/customer.dart';
@@ -835,8 +837,21 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final sale = await checkoutProvider.completeCheckout();
     
     if (sale != null) {
-      // Navigate to order confirmation screen
+      // Trigger global state refresh for Dashboard and other screens
       if (mounted) {
+        final saleProvider = Provider.of<SaleProvider>(context, listen: false);
+        final productProvider = Provider.of<ProductProvider>(context, listen: false);
+        // Run refresh in background without waiting (don't block navigation)
+        Future.wait([
+          saleProvider.refreshAllData(),
+          productProvider.refreshInventory(),
+        ]).then((_) {
+          print('✅ CHECKOUT: Global state refreshed after sale completion');
+        }).catchError((e) {
+          print('⚠️ CHECKOUT: Error refreshing state: $e');
+        });
+        
+        // Navigate to order confirmation screen
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (context) => OrderConfirmationScreen(sale: sale),

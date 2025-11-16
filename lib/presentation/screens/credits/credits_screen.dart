@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../providers/currency_provider.dart';
 import '../../../data/repositories/sale_repository_impl.dart';
 import '../../providers/sale_provider.dart';
+import '../../providers/product_provider.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../domain/entities/sale_item.dart';
 
@@ -815,6 +816,13 @@ class _CreditsScreenState extends State<CreditsScreen> with SingleTickerProvider
                 if (mounted) {
                   Navigator.pop(context);
                   await _loadCredits();
+                  // Trigger global state refresh for Dashboard and other screens
+                  final saleProvider = Provider.of<SaleProvider>(context, listen: false);
+                  final productProvider = Provider.of<ProductProvider>(context, listen: false);
+                  await Future.wait([
+                    saleProvider.refreshAllData(),
+                    productProvider.refreshInventory(),
+                  ]);
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Payment recorded successfully'),
@@ -873,6 +881,14 @@ class _CreditsScreenState extends State<CreditsScreen> with SingleTickerProvider
       
       await _loadCredits();
       
+      // Trigger global state refresh for Dashboard and other screens
+      final saleProvider = Provider.of<SaleProvider>(context, listen: false);
+      final productProvider = Provider.of<ProductProvider>(context, listen: false);
+      await Future.wait([
+        saleProvider.refreshAllData(),
+        productProvider.refreshInventory(),
+      ]);
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -919,6 +935,10 @@ class _CreditsScreenState extends State<CreditsScreen> with SingleTickerProvider
       
       if (ok) {
         await _loadCredits();
+        // Note: refreshAllData() is already called inside deleteCreditSale()
+        // Also refresh inventory since items were restored
+        final productProvider = Provider.of<ProductProvider>(context, listen: false);
+        await productProvider.refreshInventory();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -1085,6 +1105,10 @@ class _CreditsScreenState extends State<CreditsScreen> with SingleTickerProvider
                               if (ok) {
                                 Navigator.pop(ctx);
                                 await _loadCredits();
+                                // Note: refreshAllData() is already called inside editCreditSale()
+                                // Also refresh inventory since quantities changed
+                                final productProvider = Provider.of<ProductProvider>(context, listen: false);
+                                await productProvider.refreshInventory();
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
