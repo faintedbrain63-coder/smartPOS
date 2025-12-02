@@ -10,6 +10,7 @@ import '../../providers/product_provider.dart';
 import '../../providers/category_provider.dart';
 import '../../providers/sale_provider.dart';
 import '../../../core/services/notification_service.dart';
+import 'sync_settings_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -101,7 +102,31 @@ class SettingsScreen extends StatelessWidget {
           
           const SizedBox(height: AppConstants.spacingLarge),
 
-          // Communication section removed (SMS feature deprecation)
+          // LAN Synchronization Section
+          _buildSettingsSection(
+            context,
+            'LAN Synchronization',
+            Icons.sync_outlined,
+            [
+              _buildSettingsTile(
+                context,
+                icon: Icons.lan,
+                title: 'LAN Sync',
+                subtitle: 'Multi-device synchronization',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const SyncSettingsScreen(),
+                    ),
+                  );
+                },
+                iconColor: Colors.purple,
+              ),
+            ],
+          ),
+
+          const SizedBox(height: AppConstants.spacingLarge),
 
           // Data Management Section
           _buildSettingsSection(

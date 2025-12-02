@@ -45,6 +45,10 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>This app needs access to your local network to discover and connect to the server device for synchronization.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>This app needs camera access to scan QR codes for server connection.</string>
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-9899607523942636~7868655843</string>
 	<key>SKAdNetworkItems</key>

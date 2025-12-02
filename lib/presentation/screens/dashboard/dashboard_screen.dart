@@ -265,9 +265,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Text(
               title,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                fontSize: 11,
+                height: 1.1,
+                letterSpacing: -0.1,
                 color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
               ),
               textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
             ),
           ],
         ),

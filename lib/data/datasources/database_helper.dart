@@ -54,11 +54,11 @@ class DatabaseHelper {
     }
 
     print('📂 Database path: $path');
-    print('🔢 Database version: 6');
+    print('🔢 Database version: 7');
 
     final db = await openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onOpen: (db) async {
@@ -286,6 +286,57 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX idx_sales_customer_id ON sales (customer_id)');
     await db.execute('CREATE INDEX idx_credit_payments_sale_id ON credit_payments (sale_id)');
 
+    // Create sync_config table for LAN synchronization
+    await db.execute('''
+      CREATE TABLE sync_config (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id TEXT NOT NULL UNIQUE,
+        device_mode TEXT NOT NULL DEFAULT 'disabled',
+        server_ip_address TEXT,
+        server_port INTEGER DEFAULT 8080,
+        api_key TEXT,
+        last_sync_timestamp TEXT,
+        sync_status TEXT DEFAULT 'idle',
+        auto_sync_enabled INTEGER DEFAULT 1,
+        sync_interval_minutes INTEGER DEFAULT 5,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+
+    // Create sync_logs table for tracking synchronization history
+    await db.execute('''
+      CREATE TABLE sync_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        operation_type TEXT NOT NULL,
+        timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+        status TEXT NOT NULL DEFAULT 'pending',
+        records_synced INTEGER DEFAULT 0,
+        error_message TEXT,
+        device_id TEXT,
+        details TEXT
+      )
+    ''');
+
+    // Create sync_queue table for offline operations
+    await db.execute('''
+      CREATE TABLE sync_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        operation_type TEXT NOT NULL,
+        table_name TEXT NOT NULL,
+        record_id INTEGER,
+        data TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        retry_count INTEGER DEFAULT 0,
+        last_error TEXT
+      )
+    ''');
+
+    // Create indexes for sync tables
+    await db.execute('CREATE INDEX idx_sync_logs_timestamp ON sync_logs (timestamp DESC)');
+    await db.execute('CREATE INDEX idx_sync_logs_status ON sync_logs (status)');
+    await db.execute('CREATE INDEX idx_sync_queue_created_at ON sync_queue (created_at ASC)');
+
     // Create triggers for updated_at timestamps
     await db.execute('''
       CREATE TRIGGER update_categories_timestamp 
@@ -465,6 +516,64 @@ class DatabaseHelper {
         await db.execute('CREATE INDEX IF NOT EXISTS idx_sales_is_credit_status ON sales (is_credit, transaction_status)');
         
         print('✅ DATABASE MIGRATION v5 → v6: is_credit field added successfully');
+      }
+
+      // Version 7: Add LAN synchronization support
+      if (oldVersion <= 6 && newVersion >= 7) {
+        print('🔄 DATABASE MIGRATION v6 → v7: Adding LAN sync tables...');
+        
+        // Create sync_config table
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS sync_config (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_id TEXT NOT NULL UNIQUE,
+            device_mode TEXT NOT NULL DEFAULT 'disabled',
+            server_ip_address TEXT,
+            server_port INTEGER DEFAULT 8080,
+            api_key TEXT,
+            last_sync_timestamp TEXT,
+            sync_status TEXT DEFAULT 'idle',
+            auto_sync_enabled INTEGER DEFAULT 1,
+            sync_interval_minutes INTEGER DEFAULT 5,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        ''');
+
+        // Create sync_logs table
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS sync_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            operation_type TEXT NOT NULL,
+            timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+            status TEXT NOT NULL DEFAULT 'pending',
+            records_synced INTEGER DEFAULT 0,
+            error_message TEXT,
+            device_id TEXT,
+            details TEXT
+          )
+        ''');
+
+        // Create sync_queue table
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS sync_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            operation_type TEXT NOT NULL,
+            table_name TEXT NOT NULL,
+            record_id INTEGER,
+            data TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            retry_count INTEGER DEFAULT 0,
+            last_error TEXT
+          )
+        ''');
+
+        // Create indexes for sync tables
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_sync_logs_timestamp ON sync_logs (timestamp DESC)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_sync_logs_status ON sync_logs (status)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_sync_queue_created_at ON sync_queue (created_at ASC)');
+        
+        print('✅ DATABASE MIGRATION v6 → v7: LAN sync tables added successfully');
       }
     }
   }

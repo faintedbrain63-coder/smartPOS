@@ -20,6 +20,8 @@ import 'presentation/providers/store_provider.dart';
 import 'presentation/providers/currency_provider.dart';
 import 'presentation/providers/checkout_provider.dart';
 import 'presentation/providers/order_provider.dart';
+import 'data/repositories/sync_repository_impl.dart';
+import 'presentation/providers/sync_provider.dart';
 import 'presentation/screens/main_screen.dart';
 import 'core/constants/app_constants.dart';
 import 'core/services/admob_service.dart';
@@ -147,6 +149,13 @@ class SmartPOSApp extends StatelessWidget {
           create: (context) => OrderProvider(
             context.read<SaleRepositoryImpl>(),
           ),
+        ),
+        ProxyProvider<DatabaseHelper, SyncRepositoryImpl>(
+          update: (_, databaseHelper, __) => SyncRepositoryImpl(databaseHelper),
+        ),
+        ChangeNotifierProvider<SyncProvider>(
+          create: (_) => SyncProvider(),
+          lazy: false,
         ),
         // Removed ContactProvider (SMS features deprecated)
       ],

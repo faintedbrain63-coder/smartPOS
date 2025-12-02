@@ -432,9 +432,18 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
                 ),
               ),
 
-              // Cart Items List - Scrollable
+              // Cart Items List - Scrollable with height to show ~5 items
               Expanded(
-                child: items.isEmpty
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    // Limit height to show approximately 5 items (80px per item)
+                    final maxListHeight = 400.0;
+                    final availableHeight = constraints.maxHeight;
+                    final listHeight = availableHeight < maxListHeight ? availableHeight : maxListHeight;
+                    
+                    return SizedBox(
+                      height: listHeight,
+                      child: items.isEmpty
                     ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -476,6 +485,9 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
                           );
                         },
                       ),
+                    );
+                  },
+                ),
               ),
               
               // Customer Information Section - Fixed at bottom
