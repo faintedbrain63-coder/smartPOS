@@ -155,13 +155,15 @@ class SyncProvider with ChangeNotifier {
         await _loadRecentLogs();
         notifyListeners();
       } else {
-        _error = 'Failed to connect to server';
+        // Get detailed error message from service
+        _error = _syncService.lastServiceError ?? 
+                 'Failed to connect to server. Please check the IP address, port, and API key.';
         notifyListeners();
       }
       
       return success;
     } catch (e) {
-      _error = e.toString();
+      _error = 'Connection error: ${e.toString()}';
       notifyListeners();
       return false;
     }
@@ -212,16 +214,25 @@ class SyncProvider with ChangeNotifier {
   }
 
   /// Test connection to server
-  Future<bool> testConnection(String serverIp, int port, String apiKey) async {
+  Future<Map<String, dynamic>> testConnection(String serverIp, int port, String apiKey) async {
     _error = null;
     notifyListeners();
     
     try {
-      return await _syncService.testConnection(serverIp, port, apiKey);
+      final result = await _syncService.testConnection(serverIp, port, apiKey);
+      if (!result['success']) {
+        _error = result['error'] ?? 'Connection test failed';
+        notifyListeners();
+      }
+      return result;
     } catch (e) {
-      _error = e.toString();
+      _error = 'Connection test error: ${e.toString()}';
       notifyListeners();
-      return false;
+      return {
+        'success': false,
+        'error': _error,
+        'step': 'Error',
+      };
     }
   }
 

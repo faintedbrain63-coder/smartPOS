@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
@@ -263,8 +262,41 @@ class LocalServer {
   Future<Response> _handleAuthenticate(Request request) async {
     try {
       final body = await request.readAsString();
-      final data = jsonDecode(body) as Map<String, dynamic>;
+      
+      if (body.isEmpty) {
+        return Response.badRequest(
+          body: jsonEncode({
+            'authenticated': false,
+            'error': 'Request body is empty',
+          }),
+          headers: {'Content-Type': 'application/json'},
+        );
+      }
+
+      Map<String, dynamic> data;
+      try {
+        data = jsonDecode(body) as Map<String, dynamic>;
+      } catch (e) {
+        return Response.badRequest(
+          body: jsonEncode({
+            'authenticated': false,
+            'error': 'Invalid JSON format: $e',
+          }),
+          headers: {'Content-Type': 'application/json'},
+        );
+      }
+
       final providedKey = data['api_key'] as String?;
+
+      if (providedKey == null || providedKey.isEmpty) {
+        return Response.badRequest(
+          body: jsonEncode({
+            'authenticated': false,
+            'error': 'API key is required',
+          }),
+          headers: {'Content-Type': 'application/json'},
+        );
+      }
 
       if (validateApiKey(providedKey)) {
         return Response.ok(
@@ -283,9 +315,14 @@ class LocalServer {
         }),
         headers: {'Content-Type': 'application/json'},
       );
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('❌ Authentication error: $e');
+      print('Stack trace: $stackTrace');
       return Response.internalServerError(
-        body: jsonEncode({'error': 'Authentication failed: $e'}),
+        body: jsonEncode({
+          'error': 'Internal server error during authentication',
+          'message': e.toString(),
+        }),
         headers: {'Content-Type': 'application/json'},
       );
     }

@@ -230,13 +230,34 @@ class SyncService {
 
   /// Connect to server as client
   Future<bool> _connectClientMode(String serverIp, int serverPort, String apiKey) async {
+    // Validate inputs
+    final networkHelper = NetworkHelper();
+    if (!networkHelper.isValidIpAddress(serverIp)) {
+      _lastServiceError = 'Invalid IP address format. Please enter a valid IP address (e.g., 192.168.1.100).';
+      return false;
+    }
+    
+    if (!networkHelper.isValidPort(serverPort)) {
+      _lastServiceError = 'Invalid port number. Port must be between 1 and 65535.';
+      return false;
+    }
+    
+    if (apiKey.isEmpty) {
+      _lastServiceError = 'API key cannot be empty.';
+      return false;
+    }
+
     _syncClient.configure(
       serverIp: serverIp,
       port: serverPort,
       apiKey: apiKey,
     );
 
-    return await _syncClient.authenticate();
+    final authenticated = await _syncClient.authenticate();
+    if (!authenticated) {
+      _lastServiceError = _syncClient.lastError ?? 'Failed to authenticate with server.';
+    }
+    return authenticated;
   }
 
   /// Disable sync (server or client mode)
@@ -545,7 +566,33 @@ class SyncService {
   }
 
   /// Test connection to server
-  Future<bool> testConnection(String serverIp, int port, String apiKey) async {
+  Future<Map<String, dynamic>> testConnection(String serverIp, int port, String apiKey) async {
+    // Validate inputs
+    final networkHelper = NetworkHelper();
+    if (!networkHelper.isValidIpAddress(serverIp)) {
+      return {
+        'success': false,
+        'error': 'Invalid IP address format. Please enter a valid IP address (e.g., 192.168.1.100).',
+        'step': 'Validation',
+      };
+    }
+    
+    if (!networkHelper.isValidPort(port)) {
+      return {
+        'success': false,
+        'error': 'Invalid port number. Port must be between 1 and 65535.',
+        'step': 'Validation',
+      };
+    }
+    
+    if (apiKey.isEmpty) {
+      return {
+        'success': false,
+        'error': 'API key cannot be empty.',
+        'step': 'Validation',
+      };
+    }
+
     return await _syncClient.testConnection(serverIp, port, apiKey);
   }
 

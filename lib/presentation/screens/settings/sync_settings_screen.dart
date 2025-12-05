@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 import 'dart:convert';
 import 'package:flutter/services.dart';
 import '../../providers/sync_provider.dart';
@@ -612,34 +611,116 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
         context: context,
         barrierDismissible: false,
         builder: (context) => const AlertDialog(
-          content: Row(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               CircularProgressIndicator(),
-              SizedBox(width: 16),
-              Text('Testing connection...'),
+              SizedBox(height: 16),
+              Text(
+                'Testing connection...',
+                textAlign: TextAlign.center,
+              ),
             ],
           ),
         ),
       );
     }
 
-    final success = await syncProvider.enableClientMode(
-      serverIp: serverIp,
-      serverPort: serverPort,
-      apiKey: apiKey,
-    );
-
-    if (mounted) {
-      Navigator.pop(context); // Close testing dialog
+    try {
+      // First test the connection
+      print('🔍 Testing connection to $serverIp:$serverPort');
+      final testResult = await syncProvider.testConnection(serverIp, serverPort, apiKey);
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(success
-              ? 'Connected to server successfully'
-              : 'Failed to connect to server'),
-          backgroundColor: success ? Colors.green : Colors.red,
-        ),
+      print('📊 Test result: ${testResult['success']}');
+      if (testResult['error'] != null) {
+        print('❌ Test error: ${testResult['error']}');
+      }
+
+      if (!testResult['success']) {
+        if (mounted) {
+          Navigator.pop(context); // Close testing dialog
+          
+          final errorMsg = testResult['error'] ?? 'Connection test failed';
+          print('❌ Showing error to user: $errorMsg');
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMsg),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 6),
+            ),
+          );
+        }
+        return;
+      }
+
+      // If test passed, proceed with full connection
+      if (mounted) {
+        // Update dialog text
+        Navigator.pop(context);
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const AlertDialog(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text(
+                  'Establishing connection...',
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
+      print('🔗 Establishing full connection...');
+      final success = await syncProvider.enableClientMode(
+        serverIp: serverIp,
+        serverPort: serverPort,
+        apiKey: apiKey,
       );
+
+      if (mounted) {
+        Navigator.pop(context); // Close dialog
+        
+        if (success) {
+          print('✅ Connection successful');
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Connected to server successfully'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        } else {
+          final errorMsg = syncProvider.error ?? 'Failed to connect to server';
+          print('❌ Connection failed: $errorMsg');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMsg),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 6),
+            ),
+          );
+        }
+      }
+    } catch (e, stackTrace) {
+      print('❌ Exception in _connectClient: $e');
+      print('Stack trace: $stackTrace');
+      if (mounted) {
+        Navigator.pop(context); // Close dialog if still open
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Connection error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
     }
   }
 

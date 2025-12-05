@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 
 class SyncClient {
@@ -9,6 +10,7 @@ class SyncClient {
   String? _apiKey;
   bool _isConnected = false;
   DateTime? _lastHeartbeat;
+  String? _lastError;
 
   SyncClient._internal();
 
@@ -17,12 +19,14 @@ class SyncClient {
   bool get isConnected => _isConnected;
   String? get serverUrl => _serverUrl;
   DateTime? get lastHeartbeat => _lastHeartbeat;
+  String? get lastError => _lastError;
 
   /// Configure client with server details
   void configure({required String serverIp, required int port, required String apiKey}) {
     _serverUrl = 'http://$serverIp:$port';
     _apiKey = apiKey;
     _isConnected = false;
+    _lastError = null;
   }
 
   /// Clear configuration
@@ -31,11 +35,13 @@ class SyncClient {
     _apiKey = null;
     _isConnected = false;
     _lastHeartbeat = null;
+    _lastError = null;
   }
 
   /// Authenticate with server
   Future<bool> authenticate() async {
     if (_serverUrl == null || _apiKey == null) {
+      _lastError = 'Server not configured';
       print('❌ Server not configured');
       return false;
     }
@@ -54,15 +60,57 @@ class SyncClient {
         if (_isConnected) {
           print('✅ Authentication successful');
           _lastHeartbeat = DateTime.now();
+          _lastError = null;
+        } else {
+          _lastError = 'Invalid API key. Please check your API key and try again.';
+          print('❌ Authentication failed: Invalid API key');
         }
         
         return _isConnected;
+      } else if (response.statusCode == 403) {
+        _lastError = 'Invalid API key. Please check your API key and try again.';
+        print('❌ Authentication failed: Invalid API key (403)');
+        _isConnected = false;
+        return false;
+      } else if (response.statusCode == 404) {
+        _lastError = 'Server endpoint not found. Please verify the server is running and the port is correct.';
+        print('❌ Authentication failed: Endpoint not found (404)');
+        _isConnected = false;
+        return false;
+      } else if (response.statusCode == 500) {
+        _lastError = 'Server internal error (500). The server is running but encountered an error. Please check server logs or try again.';
+        print('❌ Authentication failed: Server internal error (500)');
+        _isConnected = false;
+        return false;
+      } else {
+        _lastError = 'Server returned error (${response.statusCode}). Please check server status.';
+        print('❌ Authentication failed: ${response.statusCode}');
+        _isConnected = false;
+        return false;
       }
-
-      print('❌ Authentication failed: ${response.statusCode}');
+    } on TimeoutException {
+      _lastError = 'Connection timeout. Please check if the server is reachable and the IP address and port are correct.';
+      print('❌ Authentication timeout');
+      _isConnected = false;
+      return false;
+    } on SocketException catch (e) {
+      if (e.message.contains('Failed host lookup') || e.message.contains('nodename nor servname provided')) {
+        _lastError = 'Cannot resolve server address. Please check the IP address is correct.';
+      } else if (e.message.contains('Connection refused')) {
+        _lastError = 'Connection refused. Please check if the server is running and the port is correct.';
+      } else {
+        _lastError = 'Network error: ${e.message}. Please check your network connection.';
+      }
+      print('❌ Network error: $e');
+      _isConnected = false;
+      return false;
+    } on HttpException catch (e) {
+      _lastError = 'HTTP error: ${e.message}. Please check server configuration.';
+      print('❌ HTTP error: $e');
       _isConnected = false;
       return false;
     } catch (e) {
+      _lastError = 'Connection failed: ${e.toString()}. Please verify server IP, port, and API key.';
       print('❌ Authentication error: $e');
       _isConnected = false;
       return false;
@@ -247,35 +295,105 @@ class SyncClient {
   }
 
   /// Test connection to server
-  Future<bool> testConnection(String serverIp, int port, String apiKey) async {
+  Future<Map<String, dynamic>> testConnection(String serverIp, int port, String apiKey) async {
     final testUrl = 'http://$serverIp:$port';
+    final result = <String, dynamic>{
+      'success': false,
+      'error': null,
+      'step': null,
+    };
+    
+    print('🔍 testConnection: Testing $testUrl');
+    print('   IP: $serverIp, Port: $port, API Key: ${apiKey.substring(0, apiKey.length > 8 ? 8 : apiKey.length)}...');
     
     try {
       // First check health endpoint
+      result['step'] = 'Checking server health...';
+      print('📡 Step 1: Checking health endpoint at $testUrl/api/health');
+      
       final healthResponse = await http.get(
         Uri.parse('$testUrl/api/health'),
       ).timeout(const Duration(seconds: 5));
 
+      print('📊 Health check response: ${healthResponse.statusCode}');
       if (healthResponse.statusCode != 200) {
-        return false;
+        print('   Response body: ${healthResponse.body}');
+      }
+
+      if (healthResponse.statusCode == 200) {
+        // Health check passed, continue
+        print('✅ Health check passed');
+      } else if (healthResponse.statusCode == 500) {
+        result['error'] = 'Server internal error (500). The server is running but encountered an error. Please check server logs or try again.';
+        print('❌ Health check failed with 500');
+        return result;
+      } else {
+        result['error'] = 'Server health check failed (${healthResponse.statusCode}). Please verify the server is running and accessible.';
+        print('❌ Health check failed with ${healthResponse.statusCode}');
+        return result;
       }
 
       // Then try to authenticate
+      result['step'] = 'Authenticating...';
+      print('🔐 Step 2: Authenticating at $testUrl/api/authenticate');
+      
       final authResponse = await http.post(
         Uri.parse('$testUrl/api/authenticate'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'api_key': apiKey}),
       ).timeout(const Duration(seconds: 5));
 
+      print('📊 Auth response: ${authResponse.statusCode}');
+      print('   Response body: ${authResponse.body}');
+
       if (authResponse.statusCode == 200) {
         final data = jsonDecode(authResponse.body) as Map<String, dynamic>;
-        return data['authenticated'] == true;
+        if (data['authenticated'] == true) {
+          result['success'] = true;
+          result['step'] = 'Connection successful';
+          print('✅ Authentication successful');
+          return result;
+        } else {
+          result['error'] = 'Invalid API key. Please check your API key.';
+          print('❌ Authentication failed: API key not authenticated');
+          return result;
+        }
+      } else if (authResponse.statusCode == 403) {
+        result['error'] = 'Invalid API key. Please check your API key.';
+        print('❌ Authentication failed: 403 Forbidden');
+        return result;
+      } else if (authResponse.statusCode == 500) {
+        result['error'] = 'Server internal error (500). The server is running but encountered an error. Please check server logs or try again.';
+        print('❌ Authentication failed: 500 Internal Server Error');
+        return result;
+      } else {
+        result['error'] = 'Authentication failed (${authResponse.statusCode}). Please check server configuration.';
+        print('❌ Authentication failed: ${authResponse.statusCode}');
+        return result;
       }
-
-      return false;
-    } catch (e) {
-      print('❌ Connection test failed: $e');
-      return false;
+    } on TimeoutException catch (e) {
+      result['error'] = 'Connection timeout. Please check if the server is reachable and the IP address and port are correct.';
+      print('❌ Connection timeout: $e');
+      return result;
+    } on SocketException catch (e) {
+      print('❌ SocketException: ${e.runtimeType} - ${e.message}');
+      print('   OS Error: ${e.osError?.message}');
+      print('   Address: ${e.address}');
+      print('   Port: ${e.port}');
+      
+      if (e.message.contains('Failed host lookup') || e.message.contains('nodename nor servname provided')) {
+        result['error'] = 'Cannot resolve server address. Please check the IP address is correct.';
+      } else if (e.message.contains('Connection refused')) {
+        result['error'] = 'Connection refused. Please check if the server is running and the port is correct.';
+      } else {
+        result['error'] = 'Network error: ${e.message}. Please check your network connection.';
+      }
+      return result;
+    } catch (e, stackTrace) {
+      print('❌ Unexpected error in testConnection: $e');
+      print('   Stack trace: $stackTrace');
+      result['error'] = 'Connection test failed: ${e.toString()}';
+      return result;
     }
   }
 }
