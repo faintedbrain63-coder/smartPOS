@@ -90,6 +90,13 @@ class NativeServerPlugin(
         result.success(true)
     }
 
+    // Called from MainActivity.onDestroy
+    fun cleanUp() {
+        server?.stop()
+        server = null
+        stopForegroundService()
+    }
+
     private class SimpleWebServer(
         port: Int,
         private val channel: MethodChannel,

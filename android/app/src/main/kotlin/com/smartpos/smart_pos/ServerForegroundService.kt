@@ -108,7 +108,8 @@ class ServerForegroundService : Service() {
     }
     
     override fun onTaskRemoved(rootIntent: Intent?) {
-        // When app is swiped from recents, keep the service running
+        // When app is swiped, stop the service because Dart engine is dead
         super.onTaskRemoved(rootIntent)
+        stopForegroundService()
     }
 }
