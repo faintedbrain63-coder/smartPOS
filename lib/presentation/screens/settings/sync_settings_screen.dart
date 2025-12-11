@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'dart:convert';
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../providers/sync_provider.dart';
 import 'qr_scan_screen.dart';
 
@@ -17,6 +18,22 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
   final _serverIpController = TextEditingController();
   final _serverPortController = TextEditingController(text: '8080');
   final _apiKeyController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _checkPermissions();
+  }
+
+  Future<void> _checkPermissions() async {
+    // Request location permission for accurate IP detection
+    if (await Permission.location.request().isGranted) {
+      if (mounted) {
+        // Refresh provider to get accurate IP
+        context.read<SyncProvider>().refresh();
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -498,7 +515,13 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
       ),
     );
 
+
     if (confirmed == true && mounted) {
+      // Ensure we have permissions before starting
+      if (!await Permission.location.isGranted) {
+        await Permission.location.request();
+      }
+      
       final success = await syncProvider.enableServerMode();
       
       if (mounted) {

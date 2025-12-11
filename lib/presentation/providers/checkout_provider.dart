@@ -4,6 +4,7 @@ import '../../domain/entities/sale.dart';
 import '../../domain/entities/sale_item.dart';
 import '../../domain/repositories/sale_repository.dart';
 import '../../domain/repositories/product_repository.dart';
+import '../../data/repositories/remote/remote_sale_repository.dart';
 import '../../core/services/admob_service.dart';
 
 class CheckoutItem {
@@ -29,10 +30,17 @@ class CheckoutItem {
 }
 
 class CheckoutProvider with ChangeNotifier {
-  final SaleRepository _saleRepository;
-  final ProductRepository _productRepository;
+  SaleRepository _saleRepository;
+  ProductRepository _productRepository;
 
   CheckoutProvider(this._saleRepository, this._productRepository);
+
+  /// Update repositories (called when switching between local/remote mode)
+  void updateRepositories(SaleRepository saleRepo, ProductRepository productRepo) {
+    _saleRepository = saleRepo;
+    _productRepository = productRepo;
+    print('🔄 CheckoutProvider: Repositories updated (thin client mode: ${saleRepo.runtimeType.toString().contains('Remote')})');
+  }
 
   final List<CheckoutItem> _items = [];
   double _paymentAmount = 0.0;
@@ -257,6 +265,23 @@ class CheckoutProvider with ChangeNotifier {
         print('   customer: ${sale.customerName}');
       }
 
+      // Create sale items list
+      final saleItems = _items.map((item) => SaleItem(
+        saleId: 0, // Will be set by server
+        productId: item.product.id!,
+        quantity: item.quantity,
+        unitPrice: item.product.sellingPrice,
+        subtotal: item.totalPrice,
+      )).toList();
+
+      // Check if using thin client (remote repository)
+      final isRemote = _saleRepository is RemoteSaleRepository;
+      
+      if (isRemote) {
+        // For thin client: send items with sale, server handles stock update
+        (_saleRepository as RemoteSaleRepository).setPendingItems(saleItems);
+      }
+
       // Insert the sale
       final saleId = await _saleRepository.insertSale(sale);
       if (saleId <= 0) {
@@ -264,28 +289,30 @@ class CheckoutProvider with ChangeNotifier {
         return null;
       }
 
-      // Create and insert sale items
-      final saleItems = _items.map((item) => SaleItem(
-        saleId: saleId,
-        productId: item.product.id!,
-        quantity: item.quantity,
-        unitPrice: item.product.sellingPrice,
-        subtotal: item.totalPrice,
-      )).toList();
-
-      for (final item in saleItems) {
-        await _saleRepository.insertSaleItem(item);
-      }
-
-      // Update product stock
-      for (final item in _items) {
-        if (item.product.id != null) {
-          final updatedProduct = item.product.copyWith(
-            stockQuantity: item.product.stockQuantity - item.quantity,
+      if (!isRemote) {
+        // Local mode: insert items and update stock separately
+        for (final item in saleItems) {
+          final itemWithSaleId = SaleItem(
+            saleId: saleId,
+            productId: item.productId,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            subtotal: item.subtotal,
           );
-          await _productRepository.updateProduct(updatedProduct);
+          await _saleRepository.insertSaleItem(itemWithSaleId);
+        }
+
+        // Update product stock locally
+        for (final item in _items) {
+          if (item.product.id != null) {
+            final updatedProduct = item.product.copyWith(
+              stockQuantity: item.product.stockQuantity - item.quantity,
+            );
+            await _productRepository.updateProduct(updatedProduct);
+          }
         }
       }
+      // Note: In thin client mode, server handles items + stock in one atomic operation
 
       // Return the completed sale with ID
       final completedSale = sale.copyWith(id: saleId);

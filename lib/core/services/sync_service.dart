@@ -327,6 +327,9 @@ class SyncService {
       // Step 3: Push any pending sales to server
       await _pushPendingSales();
 
+      // Step 4: Push any pending categories to server
+      await _pushPendingCategories();
+
       // Update last sync timestamp
       _currentConfig = _currentConfig!.copyWith(
         lastSyncTimestamp: DateTime.now(),
@@ -492,6 +495,85 @@ class SyncService {
       data: saleData,
     );
     print('📥 Sale queued for sync');
+  }
+
+  /// Push category to server (create or update)
+  Future<bool> pushCategory(Map<String, dynamic> category, {bool isUpdate = false}) async {
+    if (!isClientMode) {
+      print('⚠️ Not in client mode, cannot push category');
+      return false;
+    }
+
+    if (!_syncClient.isConnected) {
+      print('⚠️ Not connected to server, queueing category for later');
+      // Queue for later sync
+      await _syncRepository.addToSyncQueue(
+        operationType: isUpdate ? 'update' : 'create',
+        tableName: 'categories',
+        recordId: category['id'] as int?,
+        data: category,
+      );
+      return false;
+    }
+
+    try {
+      final success = await _syncClient.submitCategory(category, isUpdate: isUpdate);
+      if (success) {
+        await _logSync(
+          isUpdate ? 'category_update_push' : 'category_create_push',
+          'success',
+          recordsSynced: 1,
+        );
+      } else {
+        await _logSync(
+          isUpdate ? 'category_update_push' : 'category_create_push',
+          'failed',
+          errorMessage: 'Failed to ${isUpdate ? 'update' : 'create'} category on server',
+        );
+      }
+      return success;
+    } catch (e) {
+      print('❌ Error pushing category: $e');
+      await _logSync(
+        isUpdate ? 'category_update_push' : 'category_create_push',
+        'failed',
+        errorMessage: e.toString(),
+      );
+      return false;
+    }
+  }
+
+  /// Push pending categories to server
+  Future<void> _pushPendingCategories() async {
+    final queueItems = await _syncRepository.getPendingSyncQueue();
+    
+    final categoriesToPush = queueItems.where((item) => item['table_name'] == 'categories').toList();
+    
+    if (categoriesToPush.isEmpty) {
+      return;
+    }
+
+    for (final item in categoriesToPush) {
+      final category = item['data'] as Map<String, dynamic>;
+      final isUpdate = item['operation_type'] == 'update';
+      
+      final success = await _syncClient.submitCategory(category, isUpdate: isUpdate);
+      
+      if (success) {
+        await _syncRepository.removeFromSyncQueue(item['id'] as int);
+        await _logSync(
+          isUpdate ? 'category_update_push' : 'category_create_push',
+          'success',
+          recordsSynced: 1,
+        );
+      } else {
+        await _logSync(
+          isUpdate ? 'category_update_push' : 'category_create_push',
+          'failed',
+          errorMessage: 'Failed to ${isUpdate ? 'update' : 'create'} category',
+        );
+      }
+    }
   }
 
   /// Start auto-sync timer

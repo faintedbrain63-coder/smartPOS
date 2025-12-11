@@ -4,6 +4,9 @@ import '../../core/services/local_server.dart';
 import '../../domain/entities/sync_config.dart';
 import '../../domain/entities/sync_log.dart';
 
+/// Callback for when sync mode changes (for RepositoryProvider integration)
+typedef SyncModeCallback = void Function(bool isClientMode, String? serverUrl, String? apiKey);
+
 class SyncProvider with ChangeNotifier {
   final SyncService _syncService = SyncService();
   
@@ -12,6 +15,15 @@ class SyncProvider with ChangeNotifier {
   bool _isSyncing = false;
   String? _error;
   String? _localIpAddress;
+  
+  // Callback for notifying RepositoryProvider when mode changes
+  SyncModeCallback? onSyncModeChanged;
+  
+  // Expose server connection details for RepositoryProvider
+  String? get serverUrl => _config != null && _config!.serverIpAddress != null 
+      ? 'http://${_config!.serverIpAddress}:${_config!.serverPort}'
+      : null;
+  String? get serverApiKey => _config?.apiKey;
 
   SyncProvider() {
     _initialize();
@@ -153,6 +165,11 @@ class SyncProvider with ChangeNotifier {
       if (success) {
         _config = _syncService.currentConfig;
         await _loadRecentLogs();
+        
+        // Notify RepositoryProvider to switch to remote repositories
+        final fullServerUrl = 'http://$serverIp:$serverPort';
+        onSyncModeChanged?.call(true, fullServerUrl, apiKey);
+        
         notifyListeners();
       } else {
         // Get detailed error message from service
@@ -178,6 +195,10 @@ class SyncProvider with ChangeNotifier {
       await _syncService.disableSync();
       _config = _syncService.currentConfig;
       await _loadRecentLogs();
+      
+      // Notify RepositoryProvider to switch back to local repositories
+      onSyncModeChanged?.call(false, null, null);
+      
       notifyListeners();
     } catch (e) {
       _error = e.toString();

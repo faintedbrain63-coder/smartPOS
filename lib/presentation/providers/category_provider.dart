@@ -3,7 +3,7 @@ import '../../domain/entities/category.dart' as entities;
 import '../../domain/repositories/category_repository.dart';
 
 class CategoryProvider with ChangeNotifier {
-  final CategoryRepository _categoryRepository;
+  CategoryRepository _categoryRepository;
 
   CategoryProvider(this._categoryRepository);
 
@@ -14,6 +14,15 @@ class CategoryProvider with ChangeNotifier {
   List<entities.Category> get categories => _categories;
   bool get isLoading => _isLoading;
   String? get error => _error;
+
+  /// Set a new repository (for switching between local/remote)
+  void setRepository(CategoryRepository repository) {
+    if (_categoryRepository != repository) {
+      _categoryRepository = repository;
+      print('📦 CategoryProvider: Repository switched');
+      loadCategories(); // Reload data from new repository
+    }
+  }
 
   Future<void> loadCategories() async {
     _setLoading(true);
@@ -43,6 +52,8 @@ class CategoryProvider with ChangeNotifier {
       final id = await _categoryRepository.insertCategory(category);
       if (id > 0) {
         await loadCategories(); // Reload to get updated list
+        // In thin client mode, repository automatically writes to server
+        print('✅ Category $id ${_categoryRepository.runtimeType.toString().contains('Remote') ? 'created on server' : 'created locally'}');
         return true;
       }
       return false;
@@ -69,6 +80,8 @@ class CategoryProvider with ChangeNotifier {
       final result = await _categoryRepository.updateCategory(category);
       if (result > 0) {
         await loadCategories(); // Reload to get updated list
+        // In thin client mode, repository automatically writes to server
+        print('✅ Category ${category.id} ${_categoryRepository.runtimeType.toString().contains('Remote') ? 'updated on server' : 'updated locally'}');
         return true;
       }
       return false;

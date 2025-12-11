@@ -150,7 +150,7 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
             const SizedBox(height: AppConstants.spacingMedium),
             Center(
               child: GestureDetector(
-                onTap: _pickImage,
+                onTap: _showImagePickerOptions,
                 child: Container(
                   width: 120,
                   height: 120,
@@ -575,10 +575,40 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
     );
   }
 
-  Future<void> _pickImage() async {
+  void _showImagePickerOptions() {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Wrap(
+            children: <Widget>[
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Take Photo'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _pickImage(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Choose from Gallery'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _pickImage(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
     try {
       final XFile? image = await _picker.pickImage(
-        source: ImageSource.gallery,
+        source: source,
         maxWidth: 800,
         maxHeight: 800,
         imageQuality: 85,

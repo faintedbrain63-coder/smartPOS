@@ -18,9 +18,17 @@ enum OrderSortBy {
 }
 
 class OrderProvider with ChangeNotifier {
-  final SaleRepository _saleRepository;
+  SaleRepository _saleRepository;
 
   OrderProvider(this._saleRepository);
+
+  /// Update repository (called when switching between local/remote mode)
+  void updateRepository(SaleRepository saleRepo) {
+    _saleRepository = saleRepo;
+    print('🔄 OrderProvider: Repository updated (thin client mode: ${saleRepo.runtimeType.toString().contains('Remote')})');
+    // Reload orders with new repository
+    loadOrders();
+  }
 
   List<Sale> _orders = [];
   List<Sale> _filteredOrders = [];

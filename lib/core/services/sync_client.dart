@@ -51,7 +51,7 @@ class SyncClient {
         Uri.parse('$_serverUrl/api/authenticate'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'api_key': _apiKey}),
-      ).timeout(const Duration(seconds: 10));
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -294,6 +294,50 @@ class SyncClient {
     }
   }
 
+  /// Submit category to server (create or update)
+  Future<bool> submitCategory(Map<String, dynamic> category, {bool isUpdate = false}) async {
+    if (_serverUrl == null || _apiKey == null) {
+      print('❌ Server not configured');
+      return false;
+    }
+
+    try {
+      final url = isUpdate 
+          ? Uri.parse('$_serverUrl/api/categories/${category['id']}')
+          : Uri.parse('$_serverUrl/api/categories');
+      
+      final response = isUpdate
+          ? await http.put(
+              url,
+              headers: {
+                'Content-Type': 'application/json',
+                'X-API-Key': _apiKey!,
+              },
+              body: jsonEncode(category),
+            ).timeout(const Duration(seconds: 10))
+          : await http.post(
+              url,
+              headers: {
+                'Content-Type': 'application/json',
+                'X-API-Key': _apiKey!,
+              },
+              body: jsonEncode(category),
+            ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        print('✅ ${isUpdate ? 'Updated' : 'Created'} category successfully');
+        return true;
+      }
+
+      print('❌ Failed to ${isUpdate ? 'update' : 'create'} category: ${response.statusCode}');
+      print('   Response: ${response.body}');
+      return false;
+    } catch (e) {
+      print('❌ Error ${isUpdate ? 'updating' : 'creating'} category: $e');
+      return false;
+    }
+  }
+
   /// Test connection to server
   Future<Map<String, dynamic>> testConnection(String serverIp, int port, String apiKey) async {
     final testUrl = 'http://$serverIp:$port';
@@ -313,7 +357,7 @@ class SyncClient {
       
       final healthResponse = await http.get(
         Uri.parse('$testUrl/api/health'),
-      ).timeout(const Duration(seconds: 5));
+      ).timeout(const Duration(seconds: 30));
 
       print('📊 Health check response: ${healthResponse.statusCode}');
       if (healthResponse.statusCode != 200) {
@@ -341,7 +385,7 @@ class SyncClient {
         Uri.parse('$testUrl/api/authenticate'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'api_key': apiKey}),
-      ).timeout(const Duration(seconds: 5));
+      ).timeout(const Duration(seconds: 30));
 
       print('📊 Auth response: ${authResponse.statusCode}');
       print('   Response body: ${authResponse.body}');

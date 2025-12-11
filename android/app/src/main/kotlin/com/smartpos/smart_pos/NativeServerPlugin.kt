@@ -1,5 +1,8 @@
 package com.smartpos.smart_pos
 
+import android.content.Context
+import android.content.Intent
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import fi.iki.elonen.NanoHTTPD
@@ -8,7 +11,10 @@ import io.flutter.plugin.common.MethodChannel
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-class NativeServerPlugin(private val channel: MethodChannel) : MethodChannel.MethodCallHandler {
+class NativeServerPlugin(
+    private val channel: MethodChannel,
+    private val context: Context
+) : MethodChannel.MethodCallHandler {
     private var server: SimpleWebServer? = null
     private val handler = Handler(Looper.getMainLooper())
 
@@ -34,10 +40,41 @@ class NativeServerPlugin(private val channel: MethodChannel) : MethodChannel.Met
         try {
             server = SimpleWebServer(port, channel, handler)
             server?.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false)
+            
+            // Start foreground service to keep server running
+            startForegroundService()
+            
             result.success(true)
         } catch (e: Exception) {
             e.printStackTrace()
             result.error("SERVER_START_FAILED", e.message, null)
+        }
+    }
+    
+    private fun startForegroundService() {
+        try {
+            val serviceIntent = Intent(context, ServerForegroundService::class.java).apply {
+                action = "START"
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(serviceIntent)
+            } else {
+                context.startService(serviceIntent)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // Non-fatal: service may fail to start but server still runs
+        }
+    }
+    
+    private fun stopForegroundService() {
+        try {
+            val serviceIntent = Intent(context, ServerForegroundService::class.java).apply {
+                action = "STOP"
+            }
+            context.startService(serviceIntent)
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
@@ -46,6 +83,10 @@ class NativeServerPlugin(private val channel: MethodChannel) : MethodChannel.Met
             server?.stop()
             server = null
         }
+        
+        // Stop foreground service
+        stopForegroundService()
+        
         result.success(true)
     }
 
@@ -59,12 +100,28 @@ class NativeServerPlugin(private val channel: MethodChannel) : MethodChannel.Met
             val latch = CountDownLatch(1)
             var responseData: Map<String, Any?>? = null
             
-            // Read body if present
-            val map = HashMap<String, String>()
+            // Read body properly for JSON requests
+            var body: String? = null
+            val contentType = session.headers["content-type"] ?: ""
+            val contentLength = session.headers["content-length"]?.toIntOrNull() ?: 0
+            
             try {
-                session.parseBody(map)
+                if (contentLength > 0) {
+                    // Read raw body directly from input stream for JSON
+                    val buffer = ByteArray(contentLength)
+                    session.inputStream.read(buffer, 0, contentLength)
+                    body = String(buffer, Charsets.UTF_8)
+                    println("📥 Read body ($contentLength bytes): $body")
+                } else if (session.method == Method.POST || session.method == Method.PUT) {
+                    // Try parseBody for form data
+                    val map = HashMap<String, String>()
+                    session.parseBody(map)
+                    body = map["postData"]
+                    println("📥 ParseBody result: $body")
+                }
             } catch (e: Exception) {
-                // Ignore
+                println("⚠️ Error reading body: ${e.message}")
+                e.printStackTrace()
             }
             
             // Prepare request data for Flutter
@@ -72,7 +129,7 @@ class NativeServerPlugin(private val channel: MethodChannel) : MethodChannel.Met
                 "method" to session.method.name,
                 "path" to session.uri,
                 "headers" to session.headers,
-                "body" to map["postData"] // NanoHTTPD puts body in "postData" key
+                "body" to body
             )
 
             // Call Flutter on Main Thread
@@ -112,12 +169,12 @@ class NativeServerPlugin(private val channel: MethodChannel) : MethodChannel.Met
             }
 
             val statusCode = (responseData!!["statusCode"] as? Int) ?: 200
-            val body = (responseData!!["body"] as? String) ?: ""
-            val contentType = (responseData!!["contentType"] as? String) ?: "application/json"
+            val responseBody = (responseData!!["body"] as? String) ?: ""
+            val responseContentType = (responseData!!["contentType"] as? String) ?: "application/json"
             
             val status = Response.Status.lookup(statusCode) ?: Response.Status.OK
             
-            val response = newFixedLengthResponse(status, contentType, body)
+            val response = newFixedLengthResponse(status, responseContentType, responseBody)
             
             // Add headers (skip headers that NanoHTTPD sets automatically)
             val headers = responseData!!["headers"] as? Map<*, *>

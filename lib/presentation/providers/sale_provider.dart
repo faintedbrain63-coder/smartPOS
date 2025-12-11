@@ -5,7 +5,7 @@ import '../../domain/repositories/sale_repository.dart';
 import '../../core/services/notification_service.dart';
 
 class SaleProvider with ChangeNotifier {
-  final SaleRepository _saleRepository;
+  SaleRepository _saleRepository;
 
   SaleProvider(this._saleRepository);
 
@@ -26,6 +26,15 @@ class SaleProvider with ChangeNotifier {
   String? get error => _error;
   DateTime? get startDate => _startDate;
   DateTime? get endDate => _endDate;
+
+  /// Set a new repository (for switching between local/remote)
+  void setRepository(SaleRepository repository) {
+    if (_saleRepository != repository) {
+      _saleRepository = repository;
+      print('📦 SaleProvider: Repository switched');
+      refreshAllData(); // Reload all data from new repository
+    }
+  }
 
   Future<void> loadSales() async {
     _setLoading(true);

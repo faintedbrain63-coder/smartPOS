@@ -9,7 +9,7 @@ import 'data/repositories/category_repository_impl.dart';
 import 'data/repositories/product_repository_impl.dart';
   import 'data/repositories/sale_repository_impl.dart';
   import 'data/repositories/customer_repository_impl.dart';
-  import 'domain/repositories/customer_repository.dart';
+  import 'data/providers/repository_provider.dart';
   import 'presentation/providers/customer_provider.dart';
 import 'presentation/providers/category_provider.dart';
 import 'presentation/providers/product_provider.dart';
@@ -83,6 +83,18 @@ class SmartPOSApp extends StatelessWidget {
           create: (_) => DatabaseHelper(),
           lazy: false, // Initialize immediately
         ),
+        
+        // RepositoryProvider manages switching between local/remote
+        ChangeNotifierProxyProvider<DatabaseHelper, RepositoryProvider>(
+          create: (context) => RepositoryProvider(
+            Provider.of<DatabaseHelper>(context, listen: false),
+          ),
+          update: (_, databaseHelper, previous) => 
+              previous ?? RepositoryProvider(databaseHelper),
+          lazy: false,
+        ),
+        
+        // Legacy concrete implementations for backward compatibility
         ProxyProvider<DatabaseHelper, CategoryRepositoryImpl>(
           update: (_, databaseHelper, __) => CategoryRepositoryImpl(databaseHelper),
         ),
@@ -95,33 +107,57 @@ class SmartPOSApp extends StatelessWidget {
         ProxyProvider<DatabaseHelper, CustomerRepositoryImpl>(
           update: (_, databaseHelper, __) => CustomerRepositoryImpl(databaseHelper),
         ),
-        // Removed Contact and SMS-related repositories and services
         
         // Providers
         ChangeNotifierProvider<ThemeProvider>(
           create: (_) => ThemeProvider(),
         ),
-        ChangeNotifierProxyProvider<CategoryRepositoryImpl, CategoryProvider>(
+        
+        // CategoryProvider uses RepositoryProvider for dynamic switching
+        ChangeNotifierProxyProvider<RepositoryProvider, CategoryProvider>(
           create: (context) => CategoryProvider(
-            Provider.of<CategoryRepositoryImpl>(context, listen: false),
+            Provider.of<RepositoryProvider>(context, listen: false).categoryRepository,
           ),
-          update: (_, categoryRepo, previous) => previous ?? CategoryProvider(categoryRepo),
-          lazy: false, // Initialize immediately
+          update: (_, repoProvider, previous) {
+            if (previous != null) {
+              previous.setRepository(repoProvider.categoryRepository);
+              return previous;
+            }
+            return CategoryProvider(repoProvider.categoryRepository);
+          },
+          lazy: false,
         ),
-        ChangeNotifierProxyProvider<ProductRepositoryImpl, ProductProvider>(
+        
+        // ProductProvider uses RepositoryProvider for dynamic switching
+        ChangeNotifierProxyProvider<RepositoryProvider, ProductProvider>(
           create: (context) => ProductProvider(
-            Provider.of<ProductRepositoryImpl>(context, listen: false),
+            Provider.of<RepositoryProvider>(context, listen: false).productRepository,
           ),
-          update: (_, productRepo, previous) => previous ?? ProductProvider(productRepo),
-          lazy: false, // Initialize immediately
+          update: (_, repoProvider, previous) {
+            if (previous != null) {
+              previous.setRepository(repoProvider.productRepository);
+              return previous;
+            }
+            return ProductProvider(repoProvider.productRepository);
+          },
+          lazy: false,
         ),
-        ChangeNotifierProxyProvider<SaleRepositoryImpl, SaleProvider>(
+        
+        // SaleProvider uses RepositoryProvider for dynamic switching
+        ChangeNotifierProxyProvider<RepositoryProvider, SaleProvider>(
           create: (context) => SaleProvider(
-            Provider.of<SaleRepositoryImpl>(context, listen: false),
+            Provider.of<RepositoryProvider>(context, listen: false).saleRepository,
           ),
-          update: (_, saleRepo, previous) => previous ?? SaleProvider(saleRepo),
-          lazy: false, // Initialize immediately
+          update: (_, repoProvider, previous) {
+            if (previous != null) {
+              previous.setRepository(repoProvider.saleRepository);
+              return previous;
+            }
+            return SaleProvider(repoProvider.saleRepository);
+          },
+          lazy: false,
         ),
+        
         ChangeNotifierProvider<CartProvider>(
           create: (_) => CartProvider(),
         ),
@@ -138,26 +174,76 @@ class SmartPOSApp extends StatelessWidget {
           update: (_, repo, previous) => previous ?? CustomerProvider(repo),
           lazy: false,
         ),
-        ChangeNotifierProxyProvider2<SaleRepositoryImpl, ProductRepositoryImpl, CheckoutProvider>(
+        // CheckoutProvider uses RepositoryProvider for thin client support
+        ChangeNotifierProxyProvider<RepositoryProvider, CheckoutProvider>(
           create: (context) => CheckoutProvider(
-            Provider.of<SaleRepositoryImpl>(context, listen: false),
-            Provider.of<ProductRepositoryImpl>(context, listen: false),
+            Provider.of<RepositoryProvider>(context, listen: false).saleRepository,
+            Provider.of<RepositoryProvider>(context, listen: false).productRepository,
           ),
-          update: (_, saleRepo, productRepo, __) => CheckoutProvider(saleRepo, productRepo),
+          update: (_, repoProvider, previous) {
+            if (previous != null) {
+              // Update repositories if they changed (client mode switch)
+              previous.updateRepositories(
+                repoProvider.saleRepository,
+                repoProvider.productRepository,
+              );
+              return previous;
+            }
+            return CheckoutProvider(
+              repoProvider.saleRepository,
+              repoProvider.productRepository,
+            );
+          },
         ),
-        ChangeNotifierProvider<OrderProvider>(
+        // OrderProvider uses RepositoryProvider for thin client support
+        ChangeNotifierProxyProvider<RepositoryProvider, OrderProvider>(
           create: (context) => OrderProvider(
-            context.read<SaleRepositoryImpl>(),
+            Provider.of<RepositoryProvider>(context, listen: false).saleRepository,
           ),
+          update: (_, repoProvider, previous) {
+            if (previous != null) {
+              previous.updateRepository(repoProvider.saleRepository);
+              return previous;
+            }
+            return OrderProvider(repoProvider.saleRepository);
+          },
         ),
         ProxyProvider<DatabaseHelper, SyncRepositoryImpl>(
           update: (_, databaseHelper, __) => SyncRepositoryImpl(databaseHelper),
         ),
-        ChangeNotifierProvider<SyncProvider>(
-          create: (_) => SyncProvider(),
+        
+        // SyncProvider with callback to RepositoryProvider
+        ChangeNotifierProxyProvider<RepositoryProvider, SyncProvider>(
+          create: (context) {
+            final syncProvider = SyncProvider();
+            final repoProvider = Provider.of<RepositoryProvider>(context, listen: false);
+            
+            // Wire up callback to switch repositories when sync mode changes
+            syncProvider.onSyncModeChanged = (isClientMode, serverUrl, apiKey) {
+              if (isClientMode && serverUrl != null && apiKey != null) {
+                repoProvider.enableClientMode(serverUrl, apiKey);
+              } else {
+                repoProvider.disableClientMode();
+              }
+            };
+            
+            return syncProvider;
+          },
+          update: (_, repoProvider, previous) {
+            if (previous != null) {
+              // Re-wire callback in case RepositoryProvider was recreated
+              previous.onSyncModeChanged = (isClientMode, serverUrl, apiKey) {
+                if (isClientMode && serverUrl != null && apiKey != null) {
+                  repoProvider.enableClientMode(serverUrl, apiKey);
+                } else {
+                  repoProvider.disableClientMode();
+                }
+              };
+            }
+            return previous ?? SyncProvider();
+          },
           lazy: false,
         ),
-        // Removed ContactProvider (SMS features deprecated)
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
@@ -173,3 +259,4 @@ class SmartPOSApp extends StatelessWidget {
     );
   }
 }
+

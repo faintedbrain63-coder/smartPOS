@@ -837,6 +837,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final sale = await checkoutProvider.completeCheckout();
     
     if (sale != null) {
+      // In thin client mode, sale is already saved directly to server via repository
+      // No need to queue for sync - it's already on the server!
+      print('✅ CHECKOUT: Sale ${sale.id} completed');
+      
       // Trigger global state refresh for Dashboard and other screens
       if (mounted) {
         final saleProvider = Provider.of<SaleProvider>(context, listen: false);

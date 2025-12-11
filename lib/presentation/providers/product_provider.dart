@@ -3,7 +3,7 @@ import '../../domain/entities/product.dart';
 import '../../domain/repositories/product_repository.dart';
 
 class ProductProvider with ChangeNotifier {
-  final ProductRepository _productRepository;
+  ProductRepository _productRepository;
 
   ProductProvider(this._productRepository);
 
@@ -26,6 +26,15 @@ class ProductProvider with ChangeNotifier {
   int get totalProducts => _products.length;
   int get lowStockCount => _lowStockProducts.length;
   int get outOfStockCount => _outOfStockProducts.length;
+
+  /// Set a new repository (for switching between local/remote)
+  void setRepository(ProductRepository repository) {
+    if (_productRepository != repository) {
+      _productRepository = repository;
+      print('📦 ProductProvider: Repository switched');
+      loadProducts(); // Reload data from new repository
+    }
+  }
 
   Future<void> loadProducts() async {
     _setLoading(true);

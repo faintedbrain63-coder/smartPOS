@@ -10,6 +10,6 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
-        channel.setMethodCallHandler(NativeServerPlugin(channel))
+        channel.setMethodCallHandler(NativeServerPlugin(channel, applicationContext))
     }
 }
