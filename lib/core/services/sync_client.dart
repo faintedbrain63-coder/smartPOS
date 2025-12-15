@@ -94,14 +94,29 @@ class SyncClient {
       _isConnected = false;
       return false;
     } on SocketException catch (e) {
+      print('❌ SocketException details: ${e.runtimeType}');
+      print('   Message: ${e.message}');
+      print('   OS Error: ${e.osError?.message}');
+      print('   Address: ${e.address}');
+      print('   Port: ${e.port}');
+      
       if (e.message.contains('Failed host lookup') || e.message.contains('nodename nor servname provided')) {
         _lastError = 'Cannot resolve server address. Please check the IP address is correct.';
       } else if (e.message.contains('Connection refused')) {
         _lastError = 'Connection refused. Please check if the server is running and the port is correct.';
+      } else if (e.osError?.message.contains('Network is unreachable') == true) {
+        _lastError = 'Network is unreachable. Please check that both devices are on the same WiFi network.';
+      } else if (e.osError?.message.contains('No route to host') == true) {
+        _lastError = 'No route to host. Please check that server IP is accessible from this device.';
       } else {
-        _lastError = 'Network error: ${e.message}. Please check your network connection.';
+        _lastError = 'Network error: ${e.osError?.message ?? e.message}. Please check your network connection.';
       }
-      print('❌ Network error: $e');
+      _isConnected = false;
+      return false;
+    } on http.ClientException catch (e) {
+      print('❌ ClientException: ${e.message}');
+      print('   URI: ${e.uri}');
+      _lastError = 'Connection failed: ${e.message}. Please verify server is running and accessible.';
       _isConnected = false;
       return false;
     } on HttpException catch (e) {
@@ -109,9 +124,11 @@ class SyncClient {
       print('❌ HTTP error: $e');
       _isConnected = false;
       return false;
-    } catch (e) {
-      _lastError = 'Connection failed: ${e.toString()}. Please verify server IP, port, and API key.';
+    } catch (e, stackTrace) {
       print('❌ Authentication error: $e');
+      print('   Type: ${e.runtimeType}');
+      print('   StackTrace: $stackTrace');
+      _lastError = 'Connection failed: ${e.toString()}. Please verify server IP, port, and API key.';
       _isConnected = false;
       return false;
     }
@@ -429,12 +446,22 @@ class SyncClient {
         result['error'] = 'Cannot resolve server address. Please check the IP address is correct.';
       } else if (e.message.contains('Connection refused')) {
         result['error'] = 'Connection refused. Please check if the server is running and the port is correct.';
+      } else if (e.osError?.message.contains('Network is unreachable') == true) {
+        result['error'] = 'Network is unreachable. Please check that both devices are on the same WiFi network.';
+      } else if (e.osError?.message.contains('No route to host') == true) {
+        result['error'] = 'No route to host. Please check that server IP is accessible from this device.';
       } else {
-        result['error'] = 'Network error: ${e.message}. Please check your network connection.';
+        result['error'] = 'Network error: ${e.osError?.message ?? e.message}. Please check your network connection.';
       }
+      return result;
+    } on http.ClientException catch (e) {
+      print('❌ ClientException in testConnection: ${e.message}');
+      print('   URI: ${e.uri}');
+      result['error'] = 'Connection failed: ${e.message}. Please verify server is running and accessible.';
       return result;
     } catch (e, stackTrace) {
       print('❌ Unexpected error in testConnection: $e');
+      print('   Type: ${e.runtimeType}');
       print('   Stack trace: $stackTrace');
       result['error'] = 'Connection test failed: ${e.toString()}';
       return result;
