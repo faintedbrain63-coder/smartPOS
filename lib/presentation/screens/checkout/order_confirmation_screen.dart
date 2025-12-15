@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:printing/printing.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import '../../providers/currency_provider.dart';
 import '../../providers/checkout_provider.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/order_provider.dart';
+import '../../providers/store_provider.dart';
 import '../../../domain/entities/sale.dart';
 import '../main_screen.dart';
 import 'order_management_screen.dart';
@@ -158,6 +162,19 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
+                        // Store Name
+                        Consumer<StoreProvider>(
+                          builder: (context, storeProvider, child) {
+                            return Text(
+                              storeProvider.storeName,
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 8),
                         Icon(
                           Icons.receipt_long,
                           size: 48,
@@ -194,6 +211,23 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
                 // Action buttons
                 Column(
                   children: [
+                    // Print Receipt Button
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () => _printReceipt(currencyProvider),
+                        icon: const Icon(Icons.print),
+                        label: const Text('Print Receipt'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green[600],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
@@ -382,6 +416,112 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
         builder: (context) => const MainScreen(initialIndex: 0), // Dashboard tab
       ),
       (route) => false,
+    );
+  }
+
+  Future<void> _printReceipt(CurrencyProvider currencyProvider) async {
+    final storeProvider = Provider.of<StoreProvider>(context, listen: false);
+    final storeName = storeProvider.storeName;
+    
+    final pdf = pw.Document();
+    
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.roll80,
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            children: [
+              // Store Name Header
+              pw.Text(
+                storeName,
+                style: pw.TextStyle(
+                  fontSize: 18,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 8),
+              pw.Divider(),
+              pw.SizedBox(height: 8),
+              
+              // Receipt Title
+              pw.Text(
+                'SALES RECEIPT',
+                style: pw.TextStyle(
+                  fontSize: 14,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 8),
+              
+              // Order Info
+              pw.Text('Order #${widget.sale.id}'),
+              pw.Text('Date: ${_formatDateTime(widget.sale.saleDate)}'),
+              if (widget.sale.customerName != null)
+                pw.Text('Customer: ${widget.sale.customerName}'),
+              pw.Text('Payment: ${_formatPaymentMethod(widget.sale.paymentMethod)}'),
+              
+              pw.SizedBox(height: 12),
+              pw.Divider(),
+              pw.SizedBox(height: 12),
+              
+              // Transaction Details
+              _buildPdfRow('Subtotal', currencyProvider.formatPrice(widget.sale.totalAmount)),
+              _buildPdfRow('Amount Paid', currencyProvider.formatPrice(widget.sale.paymentAmount)),
+              _buildPdfRow('Change', currencyProvider.formatPrice(widget.sale.changeAmount)),
+              
+              pw.SizedBox(height: 8),
+              pw.Divider(),
+              pw.SizedBox(height: 8),
+              
+              // Total
+              pw.Text(
+                'TOTAL: ${currencyProvider.formatPrice(widget.sale.totalAmount)}',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              
+              pw.SizedBox(height: 16),
+              pw.Divider(),
+              pw.SizedBox(height: 8),
+              
+              // Thank you message
+              pw.Text(
+                'Thank you for your purchase!',
+                style: pw.TextStyle(
+                  fontSize: 12,
+                  fontStyle: pw.FontStyle.italic,
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Text(
+                'Status: ${widget.sale.transactionStatus.toUpperCase()}',
+                style: pw.TextStyle(fontSize: 10),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+      name: 'Receipt_${widget.sale.id}',
+    );
+  }
+  
+  pw.Widget _buildPdfRow(String label, String value) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 2),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(label),
+          pw.Text(value),
+        ],
+      ),
     );
   }
 }

@@ -1017,6 +1017,12 @@ class _NewSaleScreenState extends State<NewSaleScreen> {
           overflow: TextOverflow.ellipsis,
         ),
         duration: const Duration(seconds: 1),
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.only(
+          bottom: MediaQuery.of(context).size.height - 150,
+          left: 16,
+          right: 16,
+        ),
       ),
     );
   }

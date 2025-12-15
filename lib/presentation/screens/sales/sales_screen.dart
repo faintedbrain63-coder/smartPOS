@@ -264,9 +264,22 @@ class _SalesScreenState extends State<SalesScreen> {
   void _showSaleDetails(Sale sale) async {
     final repo = Provider.of<SaleRepositoryImpl>(context, listen: false);
     final currency = Provider.of<CurrencyProvider>(context, listen: false);
+    final productProvider = Provider.of<ProductProvider>(context, listen: false);
     
     // Fetch sale items
     final items = await repo.getSaleItems(sale.id!);
+    
+    // Build a map of product id to product name
+    final productNames = <int, String>{};
+    for (final item in items) {
+      final product = productProvider.products.firstWhere(
+        (p) => p.id == item.productId,
+        orElse: () => productProvider.products.isNotEmpty 
+            ? productProvider.products.first 
+            : throw Exception('Product not found'),
+      );
+      productNames[item.productId] = product.id == item.productId ? product.name : 'Product #${item.productId}';
+    }
     
     if (!mounted) return;
     
@@ -316,7 +329,7 @@ class _SalesScreenState extends State<SalesScreen> {
                       ElevatedButton.icon(
                         onPressed: () {
                           Navigator.pop(context);
-                          _editSale(sale, items);
+                          _editSale(sale, items, productNames);
                         },
                         icon: const Icon(Icons.edit, size: 18),
                         label: const Text('Edit Sale'),
@@ -365,7 +378,7 @@ class _SalesScreenState extends State<SalesScreen> {
                       const SizedBox(height: 8),
                       ...items.map((item) => Card(
                         child: ListTile(
-                          title: Text('Product #${item.productId}'),
+                          title: Text(productNames[item.productId] ?? 'Product #${item.productId}'),
                           subtitle: Text('Qty: ${item.quantity} × ${currency.formatPrice(item.unitPrice)}'),
                           trailing: Text(
                             currency.formatPrice(item.subtotal),
@@ -400,7 +413,7 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  Future<void> _editSale(Sale sale, List<SaleItem> items) async {
+  Future<void> _editSale(Sale sale, List<SaleItem> items, Map<int, String> productNames) async {
     final saleProvider = Provider.of<SaleProvider>(context, listen: false);
     final currency = Provider.of<CurrencyProvider>(context, listen: false);
     
@@ -452,9 +465,10 @@ class _SalesScreenState extends State<SalesScreen> {
                         itemCount: items.length,
                         itemBuilder: (c, i) {
                           final it = items[i];
+                          final productName = productNames[it.productId] ?? 'Product #${it.productId}';
                           return Card(
                             child: ListTile(
-                              title: Text('Product #${it.productId}'),
+                              title: Text(productName),
                               subtitle: Text('Price: ${currency.formatPrice(it.unitPrice)}'),
                               trailing: SizedBox(
                                 width: 80,

@@ -39,6 +39,9 @@ dependencies:
   network_info_plus: ^5.0.0  # Get local IP address
   crypto: ^3.0.3             # API key generation
   device_info_plus: ^10.0.0
+  # PDF and Printing
+  pdf: ^3.10.8
+  printing: ^5.12.0
 
   path: any
 dev_dependencies:
