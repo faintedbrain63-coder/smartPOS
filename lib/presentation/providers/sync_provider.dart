@@ -4,11 +4,14 @@ import '../../core/services/local_server.dart';
 import '../../domain/entities/sync_config.dart';
 import '../../domain/entities/sync_log.dart';
 
+import '../../core/utils/network_helper.dart';
+
 /// Callback for when sync mode changes (for RepositoryProvider integration)
 typedef SyncModeCallback = void Function(bool isClientMode, String? serverUrl, String? apiKey);
 
 class SyncProvider with ChangeNotifier {
   final SyncService _syncService = SyncService();
+  final NetworkHelper _networkHelper = NetworkHelper();
   
   SyncConfig? _config;
   List<SyncLog> _recentLogs = [];
@@ -93,10 +96,29 @@ class SyncProvider with ChangeNotifier {
     }
   }
 
+  List<String> _availableIps = [];
+  List<String> get availableIps => _availableIps;
+
   /// Load local IP address
   Future<void> _loadLocalIp() async {
     try {
+      // Get primary IP
       _localIpAddress = await _syncService.getLocalIpAddress();
+      
+      // Get all available interfaces for troubleshooting
+      final interfaces = await _networkHelper.getNetworkInterfaces();
+      _availableIps = interfaces
+          .map((i) => i['address'] as String)
+          .where((ip) => ip != '127.0.0.1' && ip != '::1')
+          .toList();
+          
+      // Ensure primary IP is first
+      if (_localIpAddress != null && _availableIps.contains(_localIpAddress!)) {
+        _availableIps.remove(_localIpAddress);
+        _availableIps.insert(0, _localIpAddress!);
+      } else if (_localIpAddress != null) {
+        _availableIps.insert(0, _localIpAddress!);
+      }
     } catch (e) {
       print('Error loading local IP: $e');
     }

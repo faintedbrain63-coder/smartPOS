@@ -6,6 +6,7 @@ import '../../providers/product_provider.dart';
 import '../../providers/currency_provider.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/utils/formatters.dart';
+import 'fast_moving_products_screen.dart';
 
 class AnalyticsScreen extends StatefulWidget {
   const AnalyticsScreen({super.key});
@@ -936,32 +937,81 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Top Selling Products',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Top Selling Products',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const FastMovingProductsScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text('View All'),
+                ),
+              ],
             ),
             const SizedBox(height: AppConstants.spacingMedium),
-            // Placeholder for top selling products
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: 3,
-              itemBuilder: (context, index) {
-                return ListTile(
-                  leading: CircleAvatar(
-                    child: Text('${index + 1}'),
-                  ),
-                  title: Text('Product ${index + 1}'),
-                  subtitle: Text('${10 - index * 2} units sold'),
-                  trailing: Text(
-                    Formatters.formatCurrency((100 - index * 20).toDouble()),
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.primary,
-                    ),
-                  ),
+            FutureBuilder<List<Map<String, dynamic>>>(
+              future: saleProvider.getTopSellingProducts(limit: 5),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const SizedBox(
+                    height: 100,
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                
+                final products = snapshot.data ?? [];
+                
+                if (products.isEmpty) {
+                  return const SizedBox(
+                    height: 100,
+                    child: Center(child: Text('No sales data available')),
+                  );
+                }
+
+                return ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: products.length,
+                  itemBuilder: (context, index) {
+                    final product = products[index];
+                    final rank = index + 1;
+                    final name = product['name'] as String;
+                    final totalSold = (product['total_sold'] as num).toInt();
+                    final totalRevenue = (product['total_revenue'] as num).toDouble();
+
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(
+                        backgroundColor: rank == 1 ? Colors.amber : theme.colorScheme.primaryContainer,
+                        foregroundColor: rank == 1 ? Colors.white : theme.colorScheme.onPrimaryContainer,
+                        child: Text('$rank'),
+                      ),
+                      title: Text(name),
+                      subtitle: Text('$totalSold units sold'),
+                      trailing: Consumer<CurrencyProvider>(
+                        builder: (context, currencyProvider, child) {
+                          return Text(
+                            currencyProvider.formatPrice(totalRevenue),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.primary,
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  },
                 );
               },
             ),

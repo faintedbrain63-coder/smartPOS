@@ -203,12 +203,66 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
             ),
             const SizedBox(height: 16),
             
-            // Local IP Address
-            _buildInfoRow(
-              icon: Icons.computer,
-              label: 'Local IP',
-              value: syncProvider.localIpAddress ?? 'Loading...',
-            ),
+              // Local IP Address (Dropdown if multiple, text if single)
+              if (syncProvider.availableIps.isNotEmpty) ...[
+                if (syncProvider.availableIps.length > 1)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.computer, size: 20, color: Colors.grey),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Local IP Addresses (Try these)',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              DropdownButtonFormField<String>(
+                                value: syncProvider.localIpAddress,
+                                decoration: const InputDecoration(
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 0, vertical: 8),
+                                  border: UnderlineInputBorder(),
+                                ),
+                                items: syncProvider.availableIps.map((ip) {
+                                  return DropdownMenuItem(
+                                    value: ip,
+                                    child: Text(ip, style: const TextStyle(fontWeight: FontWeight.w500)),
+                                  );
+                                }).toList(),
+                                onChanged: (value) {
+                                  // Just UI change, actual binding is 0.0.0.0 so any works
+                                  if (value != null) {
+                                    // Trigger rebuild with new QR logic? 
+                                    // For now just let them see the IPs
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  _buildInfoRow(
+                    icon: Icons.computer,
+                    label: 'Local IP',
+                    value: syncProvider.localIpAddress ?? 'Loading...',
+                  ),
+              ] else 
+                 _buildInfoRow(
+                    icon: Icons.computer,
+                    label: 'Local IP',
+                    value: 'No network detected',
+                  ),
             
             // Port
             _buildInfoRow(
@@ -239,6 +293,17 @@ class _SyncSettingsScreenState extends State<SyncSettingsScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  if (syncProvider.availableIps.length > 1)
+                    Text(
+                      'If connection fails, try using a different IP from the list above.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.orange.shade800,
+                        fontStyle: FontStyle.italic,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
                   const SizedBox(height: 8),
                   Container(
                     padding: const EdgeInsets.all(16),
